@@ -22,6 +22,7 @@ const altitudeChart = new Chart(chartCtx, {
     }
 });
 
+
 // Rocket properties
 const rocket = {
     x: canvas.width / 2 - 10,
@@ -34,6 +35,8 @@ const rocket = {
     gravity: 9.81,
     isLaunched: false
 };
+
+const metersPerPixel = 0.5; // Adjust this value for realistic scale
 
 let thrustTime = 2000; // milliseconds of burn time
 let launchTime = null;
@@ -66,7 +69,7 @@ function render() {
 
         rocket.acceleration = rocket.thrust + rocket.gravity;
         rocket.velocity += rocket.acceleration * deltaTime;
-        rocket.y += rocket.velocity;
+        rocket.y += rocket.velocity * deltaTime / metersPerPixel;
 
         // Stop the rocket from falling below ground
         if (rocket.y + rocket.height > canvas.height) {
@@ -78,7 +81,8 @@ function render() {
 
     drawRocket();
 
-    document.getElementById('altitude').textContent = Math.max(0, Math.round(canvas.height - rocket.y - rocket.height));
+    const altitude = Math.max(0, ((canvas.height - rocket.y - rocket.height) * metersPerPixel).toFixed(2));
+    document.getElementById('altitude').textContent = altitude;
     const velocity = rocket.velocity.toFixed(2);
     const velocityDisplay = rocket.velocity < 0 ? `${Math.abs(velocity)} m/s ↑` : `${velocity} m/s ↓`;
     document.getElementById('velocity').textContent = velocityDisplay;
@@ -88,7 +92,6 @@ function render() {
     document.getElementById('time').textContent = (flightTime / 1000).toFixed(2) + " s";
 
     const timeSec = (flightTime / 1000).toFixed(2);
-    const altitude = Math.max(0, Math.round(canvas.height - rocket.y - rocket.height));
 
     if (rocket.isLaunched) {
         altitudeChart.data.labels.push(timeSec);
