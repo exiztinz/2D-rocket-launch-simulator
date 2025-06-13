@@ -9,9 +9,9 @@ const rocket = {
     height: 50,
     velocity: 0,
     acceleration: 0,
-    thrust: -0.3,
-    gravity: 0.1,
-    isLaunched: true
+    thrust: 0,
+    gravity: 9.81,
+    isLaunched: false
 };
 
 // Draw rocket
@@ -39,6 +39,16 @@ function render() {
 
     drawRocket();
     requestAnimationFrame(render);
+}
+
+function launchRocket() {
+    const thrustN = parseFloat(document.getElementById('thrustInput').value); // in Newtons
+    const massKg = parseFloat(document.getElementById('massInput').value);    // in kilograms
+    const acceleration = thrustN / massKg; // F = ma → a = F / m
+    rocket.thrust = -acceleration;
+    rocket.velocity = 0;
+    rocket.y = canvas.height - rocket.height;
+    rocket.isLaunched = true;
 }
 
 render(); // Initial render and start loop
