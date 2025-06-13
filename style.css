@@ -10,3 +10,9 @@ canvas {
     background-color: #000;
     margin-top: 20px;
 }
+
+#telemetry {
+    margin-top: 20px;
+    color: #0f0;
+    font-family: monospace;
+}
