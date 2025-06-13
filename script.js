@@ -36,13 +36,33 @@ const rocket = {
     isLaunched: false
 };
 
+
 const metersPerPixel = 0.5; // Adjust this value for realistic scale
+
+// Array to hold floating atmospheric elements (clouds, debris, etc)
+const floatingObjects = [];
+// Helper to generate a floating object (cloud or debris)
+function generateFloatingObject(yOffset) {
+    return {
+        x: Math.random() * canvas.width,
+        y: rocket.y + yOffset,
+        type: Math.random() > 0.5 ? 'cloud' : 'debris'
+    };
+}
 
 let thrustTime = 2000; // milliseconds of burn time
 let launchTime = null;
 
 let lastFrameTime = Date.now();
 let flightTime = 0;
+let cameraOffset = 0;
+const trackingMargin = 100;
+let isTracking = false;
+
+function drawEnvironment() {
+    ctx.fillStyle = 'lightblue'; // Sky background
+    ctx.fillRect(0, cameraOffset, canvas.width, canvas.height);
+}
 
 // Draw rocket
 function drawRocket() {
@@ -56,7 +76,30 @@ function render() {
     const deltaTime = (now - lastFrameTime) / 1000; // in seconds
     lastFrameTime = now;
 
+    // Spawn new floating objects periodically when rocket is launched
+    if (rocket.isLaunched && Math.random() < 0.1) {
+        floatingObjects.push(generateFloatingObject(-canvas.height));
+    }
+
+    ctx.save();
+    if (rocket.isLaunched) {
+        if (!isTracking && rocket.y < canvas.height / 2) {
+            isTracking = true;
+        }
+
+        if (isTracking) {
+            // Adjust cameraOffset so the rocket is always centered vertically
+            cameraOffset = rocket.y - canvas.height / 2;
+        }
+    } else {
+        isTracking = false;
+        cameraOffset = 0;
+    }
+
+    ctx.translate(0, -cameraOffset);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    drawEnvironment();
 
     if (rocket.isLaunched) {
         if (!launchTime) launchTime = Date.now();
@@ -80,6 +123,30 @@ function render() {
     }
 
     drawRocket();
+
+    // Draw and update floating atmospheric objects (clouds, debris)
+    for (let i = floatingObjects.length - 1; i >= 0; i--) {
+        const obj = floatingObjects[i];
+        if (isTracking) {
+            obj.y += -rocket.velocity * deltaTime / metersPerPixel;
+        }
+
+        if (obj.type === 'cloud') {
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(obj.x, obj.y, 15, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            ctx.fillStyle = 'gray';
+            ctx.fillRect(obj.x, obj.y, 10, 10);
+        }
+
+        if (obj.y > cameraOffset + canvas.height + 100) {
+            floatingObjects.splice(i, 1);
+        }
+    }
+
+    ctx.restore();
 
     const altitude = Math.max(0, ((canvas.height - rocket.y - rocket.height) * metersPerPixel).toFixed(2));
     document.getElementById('altitude').textContent = altitude;
