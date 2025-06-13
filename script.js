@@ -50,7 +50,7 @@ function generateFloatingObject(yOffset) {
     };
 }
 
-let thrustTime = 2000; // milliseconds of burn time
+let thrustTime = 559000; // milliseconds of burn time
 let launchTime = null;
 
 let lastFrameTime = Date.now();
@@ -59,8 +59,8 @@ let cameraOffset = 0;
 const trackingMargin = 100;
 let isTracking = false;
 
-function drawEnvironment() {
-    ctx.fillStyle = 'lightblue'; // Sky background
+function drawEnvironment(isSpace) {
+    ctx.fillStyle = isSpace ? 'black' : 'lightblue';
     ctx.fillRect(0, cameraOffset, canvas.width, canvas.height);
 }
 
@@ -99,7 +99,9 @@ function render() {
     ctx.translate(0, -cameraOffset);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    drawEnvironment();
+    const altitude = Math.max(0, ((canvas.height - rocket.y - rocket.height) * metersPerPixel).toFixed(2));
+    const isSpace = altitude >= 100000;
+    drawEnvironment(isSpace);
 
     if (rocket.isLaunched) {
         if (!launchTime) launchTime = Date.now();
@@ -111,6 +113,9 @@ function render() {
         }
 
         rocket.acceleration = rocket.thrust + rocket.gravity;
+        const dragCoefficient = 0.002;
+        const dragForce = -Math.sign(rocket.velocity) * dragCoefficient * rocket.velocity * rocket.velocity;
+        rocket.acceleration += dragForce;
         rocket.velocity += rocket.acceleration * deltaTime;
         rocket.y += rocket.velocity * deltaTime / metersPerPixel;
 
@@ -148,7 +153,6 @@ function render() {
 
     ctx.restore();
 
-    const altitude = Math.max(0, ((canvas.height - rocket.y - rocket.height) * metersPerPixel).toFixed(2));
     document.getElementById('altitude').textContent = altitude;
     const velocity = rocket.velocity.toFixed(2);
     const velocityDisplay = rocket.velocity < 0 ? `${Math.abs(velocity)} m/s ↑` : `${velocity} m/s ↓`;
