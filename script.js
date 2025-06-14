@@ -193,7 +193,8 @@ function render() {
             rocket.isLaunched = false;
         } else if (rocket.velocity > 0 && altitude < 100) {
             const downwardVelocity = rocket.velocity;
-            const requiredNetAccel = (downwardVelocity * downwardVelocity) / (2 * altitude);
+            const safeAltitude = Math.max(altitude, 1); // meters
+            const requiredNetAccel = (downwardVelocity * downwardVelocity) / (2 * safeAltitude);
             const dragCoefficient = 0.002;
             const dragForce = dragCoefficient * rocket.velocity * rocket.velocity * atmosphereDensity;
             rocket.thrust = -(requiredNetAccel + rocket.gravity - dragForce);
