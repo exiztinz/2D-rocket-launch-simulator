@@ -6,15 +6,34 @@ const altitudeChart = new Chart(chartCtx, {
     type: 'line',
     data: {
         labels: [],
-        datasets: [{
-            label: 'Altitude (m)',
-            data: [],
-            borderWidth: 2,
-            fill: false
-        }]
+        datasets: [
+            {
+                label: 'Apogee',
+                data: [],
+                borderColor: 'orange',
+                pointBackgroundColor: 'orange',
+                pointBorderColor: 'black',
+                pointRadius: 15,
+                pointHoverRadius: 17,
+                pointStyle: 'circle',
+                showLine: false,
+                order: 0
+            },
+            {
+                label: 'Altitude (m)',
+                data: [],
+                borderColor: 'blue',
+                borderWidth: 2,
+                order: 1
+            }
+        ]
     },
     options: {
         animation: false,
+        interaction: {
+            mode: 'nearest',
+            intersect: true
+        },
         scales: {
             x: { title: { display: true, text: 'Time (s)' } },
             y: { title: { display: true, text: 'Altitude (m)' } }
@@ -50,7 +69,7 @@ function generateFloatingObject(yOffset) {
     };
 }
 
-let thrustTime = 559000; // milliseconds of burn time
+let thrustTime = 1000; // milliseconds of burn time set to 559000
 let launchTime = null;
 
 let lastFrameTime = Date.now();
@@ -58,6 +77,8 @@ let flightTime = 0;
 let cameraOffset = 0;
 const trackingMargin = 100;
 let isTracking = false;
+
+let apogee = null;
 
 function drawEnvironment(isSpace) {
     ctx.fillStyle = isSpace ? 'black' : 'lightblue';
@@ -100,6 +121,8 @@ function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const altitude = Math.max(0, ((canvas.height - rocket.y - rocket.height) * metersPerPixel).toFixed(2));
+    // Simulate atmosphere density decreasing with altitude
+    const atmosphereDensity = Math.max(0.1, 1 - altitude / 100000);
     const isSpace = altitude >= 100000;
     drawEnvironment(isSpace);
 
@@ -114,8 +137,16 @@ function render() {
 
         rocket.acceleration = rocket.thrust + rocket.gravity;
         const dragCoefficient = 0.002;
-        const dragForce = -Math.sign(rocket.velocity) * dragCoefficient * rocket.velocity * rocket.velocity;
+        // Include atmosphere density in drag force
+        const dragForce = -Math.sign(rocket.velocity) * dragCoefficient * rocket.velocity * rocket.velocity * atmosphereDensity;
         rocket.acceleration += dragForce;
+
+        // Apogee detection logic (after drag, before velocity update)
+        if (rocket.velocity > -0.1 && rocket.velocity < 0.1 && rocket.thrust === 0 && apogee === null) {
+            apogee = altitude;
+            console.log("Apogee reached at", altitude, "meters");
+        }
+
         rocket.velocity += rocket.acceleration * deltaTime;
         rocket.y += rocket.velocity * deltaTime / metersPerPixel;
 
@@ -128,6 +159,18 @@ function render() {
     }
 
     drawRocket();
+
+    if (apogee !== null) {
+        const apogeeY = canvas.height - (apogee / metersPerPixel) - rocket.height;
+        ctx.fillStyle = 'yellow';
+        ctx.beginPath();
+        ctx.arc(rocket.x + rocket.width / 2, apogeeY, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = 'white';
+        ctx.font = '14px Arial';
+        ctx.fillText(`Apogee: ${apogee} m`, rocket.x + rocket.width + 10, apogeeY);
+    }
 
     // Draw and update floating atmospheric objects (clouds, debris)
     for (let i = floatingObjects.length - 1; i >= 0; i--) {
@@ -166,7 +209,10 @@ function render() {
 
     if (rocket.isLaunched) {
         altitudeChart.data.labels.push(timeSec);
-        altitudeChart.data.datasets[0].data.push(altitude);
+        altitudeChart.data.datasets[1].data.push(altitude);
+        if (apogee !== null && altitudeChart.data.datasets[0].data.length === 0) {
+            altitudeChart.data.datasets[0].data = Array(altitudeChart.data.labels.length - 1).fill(null).concat([apogee]);
+        }
         altitudeChart.update('none');
     }
 

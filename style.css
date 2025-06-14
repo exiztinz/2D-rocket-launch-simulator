@@ -16,3 +16,19 @@ canvas {
     color: #0f0;
     font-family: monospace;
 }
+#simulator-container {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+#simulator-container canvas {
+    margin-top: 0;
+}
+
+#altitudeChart {
+    max-width: 600px;
+    max-height: 600px;
+}
