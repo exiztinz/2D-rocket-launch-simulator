@@ -12,6 +12,7 @@
     <div id="controls">
       <label>Thrust (N): <input type="number" id="thrustInput" value="76000000" step="1000000" /></label>
       <label>Mass (kg): <input type="number" id="massInput" value="549000" step="10000" /></label>
+      <label>Fuel Mass (kg): <input type="number" id="fuelMassInput" value="50000" step="10000" /></label>
       <button onclick="launchRocket()">Launch</button>
     </div>
     <div id="simulator-container">
@@ -23,6 +24,7 @@
         <p>Velocity: <span id="velocity">0</span></p>
         <p>Acceleration: <span id="acceleration">0</span></p>
         <p>Flight Time: <span id="time">0</span></p>
+        <p>Fuel Mass: <span id="fuelMass">0</span></p>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="script.js"></script>

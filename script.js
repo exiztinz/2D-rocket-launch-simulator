@@ -52,7 +52,9 @@ const rocket = {
     acceleration: 0,
     thrust: 0,
     gravity: 9.81,
-    isLaunched: false
+    isLaunched: false,
+    fuelMass: 50000, // kg
+    isp: 300, // seconds, specific impulse of engine
 };
 
 
@@ -191,13 +193,25 @@ function render() {
 
             rocket.velocity = 0;
             rocket.isLaunched = false;
-        } else if (rocket.velocity > 0 && altitude < 100) {
+        } else if (rocket.velocity > 0 && altitude < 100 && rocket.fuelMass > 0) {
             const downwardVelocity = rocket.velocity;
             const safeAltitude = Math.max(altitude, 1); // meters
             const requiredNetAccel = (downwardVelocity * downwardVelocity) / (2 * safeAltitude);
             const dragCoefficient = 0.002;
             const dragForce = dragCoefficient * rocket.velocity * rocket.velocity * atmosphereDensity;
             rocket.thrust = -(requiredNetAccel + rocket.gravity - dragForce);
+        }
+
+        if (rocket.thrust !== 0 && rocket.fuelMass > 0) {
+            const g0 = 9.81;
+            const thrustN = Math.abs(rocket.thrust * parseFloat(document.getElementById('massInput').value)); // Convert accel back to N
+            const burnRate = thrustN / (rocket.isp * g0); // kg/s
+            const burnAmount = burnRate * deltaTime;
+            rocket.fuelMass -= burnAmount;
+            if (rocket.fuelMass <= 0) {
+                rocket.fuelMass = 0;
+                rocket.thrust = 0;
+            }
         }
 
         rocket.acceleration = rocket.thrust + rocket.gravity;
@@ -273,6 +287,11 @@ function render() {
         altitudeChart.update('none');
     }
 
+    const fuelMassDisplay = document.getElementById('fuelMass');
+    if (fuelMassDisplay) {
+        fuelMassDisplay.textContent = rocket.fuelMass.toFixed(1) + " kg";
+    }
+
     requestAnimationFrame(render);
 }
 
@@ -285,6 +304,7 @@ function launchRocket() {
     rocket.velocity = 0;
     rocket.y = canvas.height - rocket.height; // ensures consistent bottom alignment
     rocket.isLaunched = true;
+    rocket.fuelMass = parseFloat(document.getElementById('fuelMassInput')?.value) || 50000;
 }
 
 render(); // Initial render and start loop
