@@ -85,10 +85,36 @@ function drawEnvironment(isSpace) {
     ctx.fillRect(0, cameraOffset, canvas.width, canvas.height);
 }
 
-// Draw rocket
+// Draw rocket with nose cone, body, and fins
 function drawRocket() {
+    ctx.fillStyle = 'gray';
+    ctx.beginPath();
+    // Nose cone
+    ctx.moveTo(rocket.x, rocket.y + 10);
+    ctx.lineTo(rocket.x + rocket.width / 2, rocket.y);
+    ctx.lineTo(rocket.x + rocket.width, rocket.y + 10);
+    ctx.closePath();
+    ctx.fill();
+
+    // Body
     ctx.fillStyle = 'red';
-    ctx.fillRect(rocket.x, rocket.y, rocket.width, rocket.height);
+    ctx.fillRect(rocket.x, rocket.y + 10, rocket.width, rocket.height - 10);
+
+    // Fins
+    ctx.fillStyle = 'black';
+    ctx.beginPath();
+    ctx.moveTo(rocket.x, rocket.y + rocket.height - 5);
+    ctx.lineTo(rocket.x - 10, rocket.y + rocket.height + 10);
+    ctx.lineTo(rocket.x, rocket.y + rocket.height);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(rocket.x + rocket.width, rocket.y + rocket.height - 5);
+    ctx.lineTo(rocket.x + rocket.width + 10, rocket.y + rocket.height + 10);
+    ctx.lineTo(rocket.x + rocket.width, rocket.y + rocket.height);
+    ctx.closePath();
+    ctx.fill();
 }
 
 // Clear and draw loop
@@ -106,6 +132,8 @@ function render() {
     if (rocket.isLaunched) {
         if (!isTracking && rocket.y < canvas.height / 2) {
             isTracking = true;
+        } else {
+            isTracking = false;
         }
 
         if (isTracking) {
@@ -135,12 +163,6 @@ function render() {
             rocket.thrust = 0; // simulate engine cutoff
         }
 
-        rocket.acceleration = rocket.thrust + rocket.gravity;
-        const dragCoefficient = 0.002;
-        // Include atmosphere density in drag force
-        const dragForce = -Math.sign(rocket.velocity) * dragCoefficient * rocket.velocity * rocket.velocity * atmosphereDensity;
-        rocket.acceleration += dragForce;
-
         // Apogee detection logic (after drag, before velocity update)
         if (rocket.velocity > -0.1 && rocket.velocity < 0.1 && rocket.thrust === 0 && apogee === null) {
             apogee = altitude;
@@ -150,12 +172,38 @@ function render() {
         rocket.velocity += rocket.acceleration * deltaTime;
         rocket.y += rocket.velocity * deltaTime / metersPerPixel;
 
-        // Stop the rocket from falling below ground
+        // Stop the rocket from falling below ground, trigger explosion if high velocity
         if (rocket.y + rocket.height > canvas.height) {
             rocket.y = canvas.height - rocket.height;
+
+            if (rocket.velocity > 10) {
+                for (let i = 0; i < 20; i++) {
+                    floatingObjects.push({
+                        x: rocket.x + rocket.width / 2 + (Math.random() - 0.5) * 40,
+                        y: rocket.y + rocket.height / 2 + (Math.random() - 0.5) * 40,
+                        type: 'debris',
+                        vx: (Math.random() - 0.5) * 200,
+                        vy: (Math.random() - 0.5) * 200,
+                        ttl: 60
+                    });
+                }
+            }
+
             rocket.velocity = 0;
             rocket.isLaunched = false;
+        } else if (rocket.velocity > 0 && altitude < 100) {
+            const downwardVelocity = rocket.velocity;
+            const requiredNetAccel = (downwardVelocity * downwardVelocity) / (2 * altitude);
+            const dragCoefficient = 0.002;
+            const dragForce = dragCoefficient * rocket.velocity * rocket.velocity * atmosphereDensity;
+            rocket.thrust = -(requiredNetAccel + rocket.gravity - dragForce);
         }
+
+        rocket.acceleration = rocket.thrust + rocket.gravity;
+        const dragCoefficient = 0.002;
+        // Include atmosphere density in drag force
+        const dragForce = -Math.sign(rocket.velocity) * dragCoefficient * rocket.velocity * rocket.velocity * atmosphereDensity;
+        rocket.acceleration += dragForce;
     }
 
     drawRocket();
@@ -185,8 +233,16 @@ function render() {
             ctx.arc(obj.x, obj.y, 15, 0, Math.PI * 2);
             ctx.fill();
         } else {
-            ctx.fillStyle = 'gray';
-            ctx.fillRect(obj.x, obj.y, 10, 10);
+            ctx.fillStyle = 'orange';
+            ctx.fillRect(obj.x, obj.y, 6, 6);
+
+            if (obj.vx !== undefined) {
+                obj.x += obj.vx * deltaTime;
+                obj.y += obj.vy * deltaTime;
+                obj.vy += 100 * deltaTime;
+                obj.ttl -= 1;
+                if (obj.ttl <= 0) floatingObjects.splice(i, 1);
+            }
         }
 
         if (obj.y > cameraOffset + canvas.height + 100) {
