@@ -55,7 +55,15 @@ const rocket = {
     isLaunched: false,
     fuelMass: 50000, // kg
     isp: 300, // seconds, specific impulse of engine
+    hasLanded: false,
 };
+
+// Gravity selector logic
+const gravitySelect = document.getElementById('gravitySelect');
+rocket.gravity = parseFloat(gravitySelect.value);
+gravitySelect.addEventListener('change', () => {
+    rocket.gravity = parseFloat(gravitySelect.value);
+});
 
 
 const metersPerPixel = 0.5; // Adjust this value for realistic scale
@@ -71,7 +79,7 @@ function generateFloatingObject(yOffset) {
     };
 }
 
-let thrustTime = 1000; // milliseconds of burn time set to 559000
+let thrustTime = 0; // milliseconds of burn time set via user input
 let launchTime = null;
 
 let lastFrameTime = Date.now();
@@ -175,9 +183,9 @@ function render() {
         rocket.y += rocket.velocity * deltaTime / metersPerPixel;
 
         // Stop the rocket from falling below ground, trigger explosion if high velocity
-        if (rocket.y + rocket.height > canvas.height) {
+        if (rocket.y + rocket.height > canvas.height && rocket.isLaunched && !rocket.hasLanded && rocket.velocity > 1) {
+            rocket.hasLanded = true;
             rocket.y = canvas.height - rocket.height;
-
             if (rocket.velocity > 10) {
                 for (let i = 0; i < 20; i++) {
                     floatingObjects.push({
@@ -189,8 +197,10 @@ function render() {
                         ttl: 60
                     });
                 }
+                alert('🚨 Crash Landing! The rocket landed too hard.');
+            } else {
+                alert('✅ Successful Landing! Well done.');
             }
-
             rocket.velocity = 0;
             rocket.isLaunched = false;
         } else if (rocket.velocity > 0 && altitude < 100 && rocket.fuelMass > 0) {
@@ -296,15 +306,35 @@ function render() {
 }
 
 function launchRocket() {
+    const durationInput = parseFloat(document.getElementById('thrustDurationInput').value);
+    thrustTime = durationInput * 1000; // convert seconds to milliseconds
+
+    // Reset graph data
+    altitudeChart.data.labels = [];
+    altitudeChart.data.datasets[0].data = [];
+    altitudeChart.data.datasets[1].data = [];
+
+    // Clear previous floating objects
+    floatingObjects.length = 0;
+
     launchTime = null;
+    rocket.hasLanded = false;
+    rocket.isLaunched = true;
+    // Reset flight state for a fresh simulation
+    timeElapsed = 0;
+    flightTime = 0;
+    rocket.velocity = 0;
+    rocket.acceleration = 0;
+    apogee = null;
+
+    rocket.y = canvas.height - rocket.height; // ensures consistent bottom alignment
+    rocket.fuelMass = parseFloat(document.getElementById('fuelMassInput')?.value) || 50000;
+
+    // Now calculate thrust and mass (after reset)
     const thrustN = parseFloat(document.getElementById('thrustInput').value); // in Newtons
     const massKg = parseFloat(document.getElementById('massInput').value);    // in kilograms
     const acceleration = thrustN / massKg; // F = ma → a = F / m
     rocket.thrust = -acceleration;
-    rocket.velocity = 0;
-    rocket.y = canvas.height - rocket.height; // ensures consistent bottom alignment
-    rocket.isLaunched = true;
-    rocket.fuelMass = parseFloat(document.getElementById('fuelMassInput')?.value) || 50000;
 }
 
 render(); // Initial render and start loop
