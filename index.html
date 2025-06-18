@@ -21,6 +21,13 @@
           <option value="1.62">Moon (1.62 m/s²)</option>
         </select>
       </label>
+      <label>Display:
+        <select id="chartSelector">
+          <option value="altitude">Altitude</option>
+          <option value="velocity">Velocity</option>
+          <option value="acceleration">Acceleration</option>
+        </select>
+      </label>
       <button onclick="launchRocket()" id="launchButton">Launch</button>
     </div>
     <div id="simulator-container">
@@ -34,6 +41,7 @@
         <p>Flight Time: <span id="time">0</span></p>
         <p>Fuel Mass: <span id="fuelMass">0</span></p>
     </div>
+    <p id="spaceStatus">Status: On Earth</p>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="script.js"></script>
 </body>

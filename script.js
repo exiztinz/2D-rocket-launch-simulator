@@ -90,6 +90,12 @@ let isTracking = false;
 
 let apogee = null;
 
+// Data arrays for chart metrics
+const altitudeData = [];
+const velocityData = [];
+const accelerationData = [];
+let selectedMetric = 'altitude';
+
 function drawEnvironment(isSpace) {
     ctx.fillStyle = isSpace ? 'black' : 'lightblue';
     ctx.fillRect(0, cameraOffset, canvas.width, canvas.height);
@@ -175,10 +181,8 @@ function render() {
 
         const timeElapsed = Date.now() - launchTime;
         flightTime = timeElapsed;
-        if (timeElapsed > thrustTime) {
+        if (timeElapsed > thrustTime || rocket.fuelMass <= 0) {
             rocket.thrust = 0; // simulate engine cutoff
-        } else if (rocket.fuelMass <= 0) {
-            rocket.thrust = 0;
         } else {
             const thrustProfile = Math.max(0.2, 1 - altitude / 100000); // Reduce thrust as you climb
             const rawThrustAccel = thrustProfile * thrustN / totalMass;
@@ -217,13 +221,32 @@ function render() {
             document.getElementById('launchButton').disabled = false;
             rocket.velocity = 0;
             rocket.isLaunched = false;
-        } else if (rocket.velocity > 0 && altitude < 100 && rocket.fuelMass > 0) {
-            const downwardVelocity = rocket.velocity;
+            document.getElementById('thrustInput').disabled = false;
+            document.getElementById('massInput').disabled = false;
+            document.getElementById('fuelMassInput').disabled = false;
+            document.getElementById('thrustDurationInput').disabled = false;
+            document.getElementById('gravitySelect').disabled = false;
+            document.getElementById('spaceStatus').textContent = "Status: On Earth";
+        } else if (rocket.fuelMass > 0 && rocket.thrust === 0 && rocket.velocity > 5) {
+            const thrustN = parseFloat(document.getElementById('thrustInput').value);
+            const dryMass = parseFloat(document.getElementById('massInput').value);
+            const assumedFuelBurnForLanding = Math.min(rocket.fuelMass, 5000);
+            const effectiveMass = dryMass + assumedFuelBurnForLanding;
+            const maxAccel = thrustN / effectiveMass;
+
             const safeAltitude = Math.max(altitude, 1); // meters
+            const downwardVelocity = rocket.velocity;
+            const g = rocket.gravity;
+
             const requiredNetAccel = (downwardVelocity * downwardVelocity) / (2 * safeAltitude);
+
             const dragCoefficient = 0.002;
             const dragForce = dragCoefficient * rocket.velocity * rocket.velocity * atmosphereDensity;
-            rocket.thrust = -(requiredNetAccel + rocket.gravity - dragForce);
+
+            if (safeAltitude < 3000 && requiredNetAccel <= maxAccel) {
+                const predictedThrust = -(requiredNetAccel + g - dragForce);
+                rocket.thrust = predictedThrust;
+            }
         }
 
         if (rocket.thrust !== 0 && rocket.fuelMass > 0) {
@@ -290,6 +313,9 @@ function render() {
     ctx.restore();
 
     document.getElementById('altitude').textContent = altitude;
+    if (altitude >= 100000) {
+        document.getElementById('spaceStatus').textContent = "Status: In Space";
+    }
     const velocity = rocket.velocity.toFixed(2);
     const velocityDisplay = rocket.velocity < 0 ? `${Math.abs(velocity)} m/s ↑` : `${velocity} m/s ↓`;
     document.getElementById('velocity').textContent = velocityDisplay;
@@ -302,7 +328,19 @@ function render() {
 
     if (rocket.isLaunched) {
         altitudeChart.data.labels.push(timeSec);
-        altitudeChart.data.datasets[1].data.push(altitude);
+        altitudeData.push(altitude);
+        velocityData.push(parseFloat((-rocket.velocity).toFixed(2)));
+        accelerationData.push(parseFloat((-rocket.acceleration).toFixed(2)));
+
+        // Dynamically set the dataset based on selected metric
+        if (selectedMetric === 'altitude') {
+            altitudeChart.data.datasets[1].data = altitudeData;
+        } else if (selectedMetric === 'velocity') {
+            altitudeChart.data.datasets[1].data = velocityData;
+        } else if (selectedMetric === 'acceleration') {
+            altitudeChart.data.datasets[1].data = accelerationData;
+        }
+
         if (apogee !== null && altitudeChart.data.datasets[0].data.length === 0) {
             altitudeChart.data.datasets[0].data = Array(altitudeChart.data.labels.length - 1).fill(null).concat([apogee]);
         }
@@ -319,6 +357,12 @@ function render() {
 
 function launchRocket() {
     document.getElementById('launchButton').disabled = true;
+    document.getElementById('thrustInput').disabled = true;
+    document.getElementById('massInput').disabled = true;
+    document.getElementById('fuelMassInput').disabled = true;
+    document.getElementById('thrustDurationInput').disabled = true;
+    document.getElementById('gravitySelect').disabled = true;
+
     const durationInput = parseFloat(document.getElementById('thrustDurationInput').value);
     thrustTime = durationInput * 1000; // convert seconds to milliseconds
 
@@ -326,6 +370,9 @@ function launchRocket() {
     altitudeChart.data.labels = [];
     altitudeChart.data.datasets[0].data = [];
     altitudeChart.data.datasets[1].data = [];
+    altitudeData.length = 0;
+    velocityData.length = 0;
+    accelerationData.length = 0;
 
     // Clear previous floating objects
     floatingObjects.length = 0;
@@ -343,11 +390,53 @@ function launchRocket() {
     rocket.y = canvas.height - rocket.height; // ensures consistent bottom alignment
     rocket.fuelMass = parseFloat(document.getElementById('fuelMassInput')?.value) || 50000;
 
+    // Immediately initialize chart dataset based on selected metric
+    if (selectedMetric === 'altitude') {
+        altitudeChart.data.datasets[1].data = altitudeData;
+        altitudeChart.data.datasets[1].label = 'Altitude (m)';
+        altitudeChart.data.datasets[1].borderColor = 'blue';
+        altitudeChart.options.scales.y.title.text = 'Altitude (m)';
+    } else if (selectedMetric === 'velocity') {
+        altitudeChart.data.datasets[1].data = velocityData;
+        altitudeChart.data.datasets[1].label = 'Velocity (m/s)';
+        altitudeChart.data.datasets[1].borderColor = 'green';
+        altitudeChart.options.scales.y.title.text = 'Velocity (m/s)';
+    } else if (selectedMetric === 'acceleration') {
+        altitudeChart.data.datasets[1].data = accelerationData;
+        altitudeChart.data.datasets[1].label = 'Acceleration (m/s²)';
+        altitudeChart.data.datasets[1].borderColor = 'red';
+        altitudeChart.options.scales.y.title.text = 'Acceleration (m/s²)';
+    }
+    altitudeChart.update();
+
     // Now calculate thrust and mass (after reset)
     const thrustN = parseFloat(document.getElementById('thrustInput').value); // in Newtons
     const massKg = parseFloat(document.getElementById('massInput').value) + rocket.fuelMass;    // in kilograms
     const acceleration = thrustN / massKg; // F = ma → a = F / m
     rocket.thrust = -acceleration;
 }
+
+// Chart selector dropdown event listener
+document.getElementById('chartSelector').addEventListener('change', (e) => {
+    selectedMetric = e.target.value;
+    const dataset = altitudeChart.data.datasets[1];
+    if (selectedMetric === 'altitude') {
+        dataset.label = 'Altitude (m)';
+        dataset.borderColor = 'blue';
+        dataset.data = altitudeData;
+        altitudeChart.options.scales.y.title.text = 'Altitude (m)';
+    } else if (selectedMetric === 'velocity') {
+        dataset.label = 'Velocity (m/s)';
+        dataset.borderColor = 'green';
+        dataset.data = velocityData;
+        altitudeChart.options.scales.y.title.text = 'Velocity (m/s)';
+    } else if (selectedMetric === 'acceleration') {
+        dataset.label = 'Acceleration (m/s²)';
+        dataset.borderColor = 'red';
+        dataset.data = accelerationData;
+        altitudeChart.options.scales.y.title.text = 'Acceleration (m/s²)';
+    }
+    altitudeChart.update();
+});
 
 render(); // Initial render and start loop
