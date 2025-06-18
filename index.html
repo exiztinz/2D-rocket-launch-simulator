@@ -10,10 +10,10 @@
 <body>
     <h1>Rocket Launch Simulator</h1>
     <div id="controls">
-      <label>Thrust (N): <input type="number" id="thrustInput" value="76000000" step="1000000" /></label>
-      <label>Mass (kg): <input type="number" id="massInput" value="549000" step="10000" /></label>
-      <label>Fuel Mass (kg): <input type="number" id="fuelMassInput" value="50000" step="10000" /></label>
-      <label>Thrust Duration (s): <input type="number" id="thrustDurationInput" value="1" step="1" /></label>
+      <label>Thrust (N): <input type="number" id="thrustInput" value="7600000" step="1000000" /></label>
+      <label>TMass (kg): <input type="number" id="massInput" value="30600" step="10000" /></label>
+      <label>Fuel Mass (kg): <input type="number" id="fuelMassInput" value="518500" step="100000" /></label>
+      <label>Thrust Duration (s): <input type="number" id="thrustDurationInput" value="220" step="10" /></label>
       <label>Gravity:
         <select id="gravitySelect">
           <option value="9.81">Earth (9.81 m/s²)</option>
@@ -21,7 +21,7 @@
           <option value="1.62">Moon (1.62 m/s²)</option>
         </select>
       </label>
-      <button onclick="launchRocket()">Launch</button>
+      <button onclick="launchRocket()" id="launchButton">Launch</button>
     </div>
     <div id="simulator-container">
       <canvas id="rocketCanvas" width="600" height="600"></canvas>

@@ -160,12 +160,22 @@ function render() {
 
     const altitude = Math.max(0, ((canvas.height - rocket.y - rocket.height) * metersPerPixel).toFixed(2));
     // Simulate atmosphere density decreasing with altitude
-    const atmosphereDensity = Math.max(0.1, 1 - altitude / 100000);
+    let atmosphereDensity = Math.max(0.001, Math.exp(-altitude / 8500));
     const isSpace = altitude >= 100000;
+    if (isSpace) {
+        atmosphereDensity = 0;
+    }
     drawEnvironment(isSpace);
 
     if (rocket.isLaunched) {
         if (!launchTime) launchTime = Date.now();
+
+        const totalMass = parseFloat(document.getElementById('massInput').value) + rocket.fuelMass;
+        const thrustN = parseFloat(document.getElementById('thrustInput').value);
+        const thrustProfile = Math.max(0.2, 1 - altitude / 100000); // Reduce thrust as you climb
+        const rawThrustAccel = thrustProfile * thrustN / totalMass;
+        const cappedThrustAccel = Math.min(rawThrustAccel, 30); // cap at 30 m/s² (~3g)
+        rocket.thrust = -cappedThrustAccel;
 
         const timeElapsed = Date.now() - launchTime;
         flightTime = timeElapsed;
@@ -201,6 +211,7 @@ function render() {
             } else {
                 alert('✅ Successful Landing! Well done.');
             }
+            document.getElementById('launchButton').disabled = false;
             rocket.velocity = 0;
             rocket.isLaunched = false;
         } else if (rocket.velocity > 0 && altitude < 100 && rocket.fuelMass > 0) {
@@ -214,7 +225,7 @@ function render() {
 
         if (rocket.thrust !== 0 && rocket.fuelMass > 0) {
             const g0 = 9.81;
-            const thrustN = Math.abs(rocket.thrust * parseFloat(document.getElementById('massInput').value)); // Convert accel back to N
+            const thrustN = Math.abs(rocket.thrust * (parseFloat(document.getElementById('massInput').value)+rocket.fuelMass)); // Convert accel back to N
             const burnRate = thrustN / (rocket.isp * g0); // kg/s
             const burnAmount = burnRate * deltaTime;
             rocket.fuelMass -= burnAmount;
@@ -223,12 +234,10 @@ function render() {
                 rocket.thrust = 0;
             }
         }
-
-        rocket.acceleration = rocket.thrust + rocket.gravity;
         const dragCoefficient = 0.002;
         // Include atmosphere density in drag force
         const dragForce = -Math.sign(rocket.velocity) * dragCoefficient * rocket.velocity * rocket.velocity * atmosphereDensity;
-        rocket.acceleration += dragForce;
+        rocket.acceleration = rocket.thrust + rocket.gravity + dragForce;
     }
 
     drawRocket();
@@ -306,6 +315,7 @@ function render() {
 }
 
 function launchRocket() {
+    document.getElementById('launchButton').disabled = true;
     const durationInput = parseFloat(document.getElementById('thrustDurationInput').value);
     thrustTime = durationInput * 1000; // convert seconds to milliseconds
 
@@ -332,7 +342,7 @@ function launchRocket() {
 
     // Now calculate thrust and mass (after reset)
     const thrustN = parseFloat(document.getElementById('thrustInput').value); // in Newtons
-    const massKg = parseFloat(document.getElementById('massInput').value);    // in kilograms
+    const massKg = parseFloat(document.getElementById('massInput').value) + rocket.fuelMass;    // in kilograms
     const acceleration = thrustN / massKg; // F = ma → a = F / m
     rocket.thrust = -acceleration;
 }
