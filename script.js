@@ -8,13 +8,13 @@ const altitudeChart = new Chart(chartCtx, {
         labels: [],
         datasets: [
             {
-                label: 'Apogee',
+                label: '',
                 data: [],
-                borderColor: 'orange',
-                pointBackgroundColor: 'orange',
-                pointBorderColor: 'black',
-                pointRadius: 15,
-                pointHoverRadius: 17,
+                borderColor: 'transparent',
+                pointBackgroundColor: 'transparent',
+                pointBorderColor: 'transparent',
+                pointRadius: 0,
+                pointHoverRadius: 0,
                 pointStyle: 'circle',
                 showLine: false,
                 order: 0
@@ -89,6 +89,7 @@ const trackingMargin = 100;
 let isTracking = false;
 
 let apogee = null;
+let apogeeIndex = null;
 
 // Data arrays for chart metrics
 const altitudeData = [];
@@ -193,6 +194,7 @@ function render() {
         // Apogee detection logic (after drag, before velocity update)
         if (rocket.velocity > -0.1 && rocket.velocity < 0.1 && rocket.thrust === 0 && apogee === null) {
             apogee = altitude;
+            apogeeIndex = altitudeChart.data.labels.length - 1;
             console.log("Apogee reached at", altitude, "meters");
         }
 
@@ -268,7 +270,7 @@ function render() {
 
     drawRocket();
 
-    if (apogee !== null) {
+    if (apogee !== null && selectedMetric === 'altitude') {
         const apogeeY = canvas.height - (apogee / metersPerPixel) - rocket.height;
         ctx.fillStyle = 'yellow';
         ctx.beginPath();
@@ -341,8 +343,16 @@ function render() {
             altitudeChart.data.datasets[1].data = accelerationData;
         }
 
-        if (apogee !== null && altitudeChart.data.datasets[0].data.length === 0) {
-            altitudeChart.data.datasets[0].data = Array(altitudeChart.data.labels.length - 1).fill(null).concat([apogee]);
+        if (
+            apogee !== null &&
+            apogeeIndex !== null &&
+            selectedMetric === 'altitude'
+        ) {
+            const apogeeData = new Array(altitudeChart.data.labels.length).fill(null);
+            if (apogeeIndex < apogeeData.length) {
+                apogeeData[apogeeIndex] = apogee;
+            }
+            altitudeChart.data.datasets[0].data = apogeeData;
         }
         altitudeChart.update('none');
     }
@@ -386,6 +396,7 @@ function launchRocket() {
     rocket.velocity = 0;
     rocket.acceleration = 0;
     apogee = null;
+    apogeeIndex = null;
 
     rocket.y = canvas.height - rocket.height; // ensures consistent bottom alignment
     rocket.fuelMass = parseFloat(document.getElementById('fuelMassInput')?.value) || 50000;
@@ -407,6 +418,13 @@ function launchRocket() {
         altitudeChart.data.datasets[1].borderColor = 'red';
         altitudeChart.options.scales.y.title.text = 'Acceleration (m/s²)';
     }
+    // Apogee marker visibility control
+    altitudeChart.data.datasets[0].label = selectedMetric === 'altitude' ? 'Apogee' : '';
+    altitudeChart.data.datasets[0].borderColor = selectedMetric === 'altitude' ? 'orange' : 'transparent';
+    altitudeChart.data.datasets[0].pointBackgroundColor = selectedMetric === 'altitude' ? 'orange' : 'transparent';
+    altitudeChart.data.datasets[0].pointBorderColor = selectedMetric === 'altitude' ? 'black' : 'transparent';
+    altitudeChart.data.datasets[0].pointRadius = selectedMetric === 'altitude' ? 15 : 0;
+    altitudeChart.data.datasets[0].pointHoverRadius = selectedMetric === 'altitude' ? 17 : 0;
     altitudeChart.update();
 
     // Now calculate thrust and mass (after reset)
@@ -436,7 +454,36 @@ document.getElementById('chartSelector').addEventListener('change', (e) => {
         dataset.data = accelerationData;
         altitudeChart.options.scales.y.title.text = 'Acceleration (m/s²)';
     }
+    altitudeChart.data.datasets[0].label = selectedMetric === 'altitude' ? 'Apogee' : '';
+    altitudeChart.data.datasets[0].borderColor = selectedMetric === 'altitude' ? 'orange' : 'transparent';
+    altitudeChart.data.datasets[0].pointBackgroundColor = selectedMetric === 'altitude' ? 'orange' : 'transparent';
+    altitudeChart.data.datasets[0].pointBorderColor = selectedMetric === 'altitude' ? 'black' : 'transparent';
+    altitudeChart.data.datasets[0].pointRadius = selectedMetric === 'altitude' ? 15 : 0;
+    altitudeChart.data.datasets[0].pointHoverRadius = selectedMetric === 'altitude' ? 17 : 0;
     altitudeChart.update();
+    // Force re-render of apogee marker if metric is altitude
+    if (selectedMetric === 'altitude' && apogee !== null && apogeeIndex !== null) {
+        const apogeeData = new Array(altitudeChart.data.labels.length).fill(null);
+        if (apogeeIndex < apogeeData.length) {
+            apogeeData[apogeeIndex] = apogee;
+        }
+        altitudeChart.data.datasets[0].data = apogeeData;
+        altitudeChart.update();
+    } else {
+        altitudeChart.data.datasets[0].data = [];
+        altitudeChart.update(); // Force update to re-scale y-axis without apogee
+    }
 });
 
 render(); // Initial render and start loop
+
+// Ensure apogee label and legend show on load if viewing altitude
+if (selectedMetric === 'altitude') {
+    altitudeChart.data.datasets[0].label = 'Apogee';
+    altitudeChart.data.datasets[0].borderColor = 'orange';
+    altitudeChart.data.datasets[0].pointBackgroundColor = 'orange';
+    altitudeChart.data.datasets[0].pointBorderColor = 'black';
+    altitudeChart.data.datasets[0].pointRadius = 15;
+    altitudeChart.data.datasets[0].pointHoverRadius = 17;
+    altitudeChart.update();
+}
