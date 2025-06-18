@@ -192,7 +192,7 @@ function render() {
         }
 
         // Apogee detection logic (after drag, before velocity update)
-        if (rocket.velocity > -0.1 && rocket.velocity < 0.1 && rocket.thrust === 0 && apogee === null) {
+        if (rocket.velocity > -0.5 && rocket.velocity < 0.5 && rocket.thrust === 0 && apogee === null) {
             apogee = altitude;
             apogeeIndex = altitudeChart.data.labels.length - 1;
             console.log("Apogee reached at", altitude, "meters");
@@ -270,7 +270,7 @@ function render() {
 
     drawRocket();
 
-    if (apogee !== null && selectedMetric === 'altitude') {
+    if (apogee !== null) {
         const apogeeY = canvas.height - (apogee / metersPerPixel) - rocket.height;
         ctx.fillStyle = 'yellow';
         ctx.beginPath();
