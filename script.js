@@ -172,15 +172,18 @@ function render() {
 
         const totalMass = parseFloat(document.getElementById('massInput').value) + rocket.fuelMass;
         const thrustN = parseFloat(document.getElementById('thrustInput').value);
-        const thrustProfile = Math.max(0.2, 1 - altitude / 100000); // Reduce thrust as you climb
-        const rawThrustAccel = thrustProfile * thrustN / totalMass;
-        const cappedThrustAccel = Math.min(rawThrustAccel, 30); // cap at 30 m/s² (~3g)
-        rocket.thrust = -cappedThrustAccel;
 
         const timeElapsed = Date.now() - launchTime;
         flightTime = timeElapsed;
         if (timeElapsed > thrustTime) {
             rocket.thrust = 0; // simulate engine cutoff
+        } else if (rocket.fuelMass <= 0) {
+            rocket.thrust = 0;
+        } else {
+            const thrustProfile = Math.max(0.2, 1 - altitude / 100000); // Reduce thrust as you climb
+            const rawThrustAccel = thrustProfile * thrustN / totalMass;
+            const cappedThrustAccel = Math.min(rawThrustAccel, 30); // cap at 30 m/s² (~3g)
+            rocket.thrust = -cappedThrustAccel;
         }
 
         // Apogee detection logic (after drag, before velocity update)
