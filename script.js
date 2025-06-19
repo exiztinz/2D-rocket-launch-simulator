@@ -434,6 +434,43 @@ function launchRocket() {
     rocket.thrust = -acceleration;
 }
 
+function resetSimulation() {
+    rocket.x = canvas.width / 2 - 10;
+    rocket.y = canvas.height - rocket.height;
+    rocket.velocity = 0;
+    rocket.acceleration = 0;
+    rocket.thrust = 0;
+    rocket.isLaunched = false;
+    rocket.hasLanded = false;
+    rocket.fuelMass = 50000;
+    flightTime = 0;
+    launchTime = null;
+    cameraOffset = 0;
+    isTracking = false;
+    apogee = null;
+    apogeeIndex = null;
+
+    altitudeData.length = 0;
+    velocityData.length = 0;
+    accelerationData.length = 0;
+    altitudeChart.data.labels = [];
+    altitudeChart.data.datasets[0].data = [];
+    altitudeChart.data.datasets[1].data = [];
+
+    document.getElementById('launchButton').disabled = false;
+    document.getElementById('thrustInput').disabled = false;
+    document.getElementById('massInput').disabled = false;
+    document.getElementById('fuelMassInput').disabled = false;
+    document.getElementById('thrustDurationInput').disabled = false;
+    document.getElementById('gravitySelect').disabled = false;
+
+    document.getElementById('spaceStatus').textContent = "Status: On Earth";
+
+    floatingObjects.length = 0;
+
+    altitudeChart.update();
+}
+
 // Chart selector dropdown event listener
 document.getElementById('chartSelector').addEventListener('change', (e) => {
     selectedMetric = e.target.value;
