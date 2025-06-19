@@ -53,7 +53,7 @@ const rocket = {
     thrust: 0,
     gravity: 9.81,
     isLaunched: false,
-    fuelMass: 50000, // kg
+    fuelMass: 518500, // kg
     isp: 300, // seconds, specific impulse of engine
     hasLanded: false,
 };
@@ -399,7 +399,7 @@ function launchRocket() {
     apogeeIndex = null;
 
     rocket.y = canvas.height - rocket.height; // ensures consistent bottom alignment
-    rocket.fuelMass = parseFloat(document.getElementById('fuelMassInput')?.value) || 50000;
+    rocket.fuelMass = parseFloat(document.getElementById('fuelMassInput')?.value) || 518500;
 
     // Immediately initialize chart dataset based on selected metric
     if (selectedMetric === 'altitude') {
@@ -442,7 +442,7 @@ function resetSimulation() {
     rocket.thrust = 0;
     rocket.isLaunched = false;
     rocket.hasLanded = false;
-    rocket.fuelMass = 50000;
+    rocket.fuelMass = 518500;
     flightTime = 0;
     launchTime = null;
     cameraOffset = 0;
