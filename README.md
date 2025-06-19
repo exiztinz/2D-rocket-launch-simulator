@@ -6,7 +6,7 @@ A simple interactive simulation of a 2D rocket launch. It calculates and visuali
   - Altitude
   - Velocity
   - Acceleration
-- Apogee
+  - Apogee
 - Interactive UI with launch and reset functionality
 - Dynamic graphing of flight metrics
 - Stage separation and fuel depletion effects
