@@ -3,9 +3,9 @@ A simple interactive simulation of a 2D rocket launch. It calculates and visuali
 ## Features
 - Simulates a 2D rocket launch with realistic physics
 - Tracks and displays:
-- Altitude
-- Velocity
-- Acceleration
+  - Altitude
+  - Velocity
+  - Acceleration
 - Apogee
 - Interactive UI with launch and reset functionality
 - Dynamic graphing of flight metrics
