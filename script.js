@@ -58,6 +58,17 @@ const rocket = {
     hasLanded: false,
 };
 
+// Realistic drag constants for Falcon 9-like rocket
+const realCd = 0.3; // dimensionless drag coefficient
+const crossSectionArea = Math.PI * Math.pow(3.66 / 2, 2); // Falcon 9 cross-sectional area in m² (~10.5)
+
+// Drag coefficient slider logic
+// let dragCoefficient = parseFloat(document.getElementById('dragSlider').value);
+// document.getElementById('dragSlider').addEventListener('input', (e) => {
+//     dragCoefficient = parseFloat(e.target.value);
+//     document.getElementById('dragValue').textContent = dragCoefficient.toFixed(4);
+// });
+
 // Gravity selector logic
 const gravitySelect = document.getElementById('gravitySelect');
 rocket.gravity = parseFloat(gravitySelect.value);
@@ -166,13 +177,39 @@ function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const altitude = Math.max(0, ((canvas.height - rocket.y - rocket.height) * metersPerPixel).toFixed(2));
-    // Simulate atmosphere density decreasing with altitude
-    let atmosphereDensity = Math.max(0.001, Math.exp(-altitude / 8500));
+    // Simulate atmosphere density decreasing with altitude, using realistic Mars, Moon, and Earth models
+    let atmosphereDensity;
+    if (rocket.gravity === 3.71) {
+        // Mars: baseline ~0.020 kg/m³ at surface, scale height ~11,100 m
+        atmosphereDensity = Math.max(0.001, 0.020 * Math.exp(-altitude / 11100));
+    } else if (rocket.gravity === 1.62) {
+        // Moon: approximate near vacuum
+        atmosphereDensity = 0.0001;
+    } else {
+        // Earth: scale height ~8,500 m, sea level ~1.225 kg/m³ (but normalized here)
+        atmosphereDensity = Math.max(0.001, Math.exp(-altitude / 8500));
+    }
     const isSpace = altitude >= 100000;
     if (isSpace) {
         atmosphereDensity = 0;
     }
-    drawEnvironment(isSpace);
+    // Determine environment and update background and status
+    const gravity = rocket.gravity;
+    if (isSpace) {
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, cameraOffset, canvas.width, canvas.height);
+        document.getElementById('spaceStatus').textContent = "Status: In Space";
+    } else if (gravity === 3.71) {
+        ctx.fillStyle = 'orange';
+        ctx.fillRect(0, cameraOffset, canvas.width, canvas.height);
+        document.getElementById('spaceStatus').textContent = "Status: On Mars";
+    } else if (gravity === 1.62) {
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, cameraOffset, canvas.width, canvas.height);
+        document.getElementById('spaceStatus').textContent = "Status: On Moon";
+    } else {
+        drawEnvironment(isSpace);  // Default to Earth sky color
+    }
 
     if (rocket.isLaunched) {
         if (!launchTime) launchTime = Date.now();
@@ -185,9 +222,9 @@ function render() {
         if (timeElapsed > thrustTime || rocket.fuelMass <= 0) {
             rocket.thrust = 0; // simulate engine cutoff
         } else {
-            const thrustProfile = Math.max(0.2, 1 - altitude / 100000); // Reduce thrust as you climb
+            const thrustProfile = 1;
             const rawThrustAccel = thrustProfile * thrustN / totalMass;
-            const cappedThrustAccel = Math.min(rawThrustAccel, 30); // cap at 30 m/s² (~3g)
+            const cappedThrustAccel = Math.min(rawThrustAccel, 50); // cap at 50 m/s² (~3g)
             rocket.thrust = -cappedThrustAccel;
         }
 
@@ -242,11 +279,11 @@ function render() {
 
             const requiredNetAccel = (downwardVelocity * downwardVelocity) / (2 * safeAltitude);
 
-            const dragCoefficient = 0.002;
-            const dragForce = dragCoefficient * rocket.velocity * rocket.velocity * atmosphereDensity;
+            // Use drag as acceleration for landing logic
+            const dragAccel = 0.5 * realCd * crossSectionArea * atmosphereDensity * rocket.velocity * rocket.velocity / effectiveMass;
 
             if (safeAltitude < 3000 && requiredNetAccel <= maxAccel) {
-                const predictedThrust = -(requiredNetAccel + g - dragForce);
+                const predictedThrust = -(requiredNetAccel + g - dragAccel);
                 rocket.thrust = predictedThrust;
             }
         }
@@ -262,10 +299,10 @@ function render() {
                 rocket.thrust = 0;
             }
         }
-        const dragCoefficient = 0.002;
-        // Include atmosphere density in drag force
-        const dragForce = -Math.sign(rocket.velocity) * dragCoefficient * rocket.velocity * rocket.velocity * atmosphereDensity;
-        rocket.acceleration = rocket.thrust + rocket.gravity + dragForce;
+        // Include atmosphere density in drag force for main flight
+        // Use realistic drag constants; this runs regardless of planet, using correct atmosphereDensity
+        const dragAccel = -0.5 * realCd * crossSectionArea * atmosphereDensity * rocket.velocity * Math.abs(rocket.velocity) / totalMass;
+        rocket.acceleration = rocket.thrust + rocket.gravity + dragAccel;
     }
 
     drawRocket();
@@ -317,6 +354,17 @@ function render() {
     document.getElementById('altitude').textContent = altitude;
     if (altitude >= 100000) {
         document.getElementById('spaceStatus').textContent = "Status: In Space";
+    } else if (altitude > 0) {
+        document.getElementById('spaceStatus').textContent = "Status: In Air";
+    } else {
+        const gravity = rocket.gravity;
+        if (gravity === 3.71) {
+            document.getElementById('spaceStatus').textContent = "Status: On Mars";
+        } else if (gravity === 1.62) {
+            document.getElementById('spaceStatus').textContent = "Status: On Moon";
+        } else {
+            document.getElementById('spaceStatus').textContent = "Status: On Earth";
+        }
     }
     const velocity = rocket.velocity.toFixed(2);
     const velocityDisplay = rocket.velocity < 0 ? `${Math.abs(velocity)} m/s ↑` : `${velocity} m/s ↓`;
@@ -324,6 +372,13 @@ function render() {
     const acc = rocket.acceleration.toFixed(2);
     const accDisplay = rocket.acceleration < 0 ? `${Math.abs(acc)} m/s² ↑` : `${acc} m/s² ↓`;
     document.getElementById('acceleration').textContent = accDisplay;
+    // Insert currentDragForce calculation just before debugThrust
+    // let currentDragForce = rocket.isLaunched ? (
+    //     -Math.sign(rocket.velocity) * dragCoefficient * rocket.velocity * rocket.velocity * Math.max(0.001, Math.exp(-((canvas.height - rocket.y - rocket.height) * metersPerPixel) / 8500))
+    // ) : 0;
+    // document.getElementById('debugThrust').textContent = `Thrust: ${rocket.thrust.toFixed(2)} m/s²`;
+    // document.getElementById('debugDrag').textContent = `Drag: ${currentDragForce.toFixed(2)} m/s²`;
+    // document.getElementById('debugAccel').textContent = `Net Accel: ${(rocket.thrust + rocket.gravity + currentDragForce).toFixed(2)} m/s²`;
     document.getElementById('time').textContent = (flightTime / 1000).toFixed(2) + " s";
 
     const timeSec = (flightTime / 1000).toFixed(2);
