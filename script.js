@@ -82,6 +82,15 @@ const metersPerPixel = 0.5; // Adjust this value for realistic scale
 // For ramped landing burn
 let rampStartTime = null;
 const rampUpTime = 4; // seconds
+let fullProgress = false;
+
+// --- Dynamic-ramp helpers ---
+function getEffectiveRampUp(maxAccel) {
+    return rampUpTime * (maxAccel / 50);
+}
+function getBuffer(v0) {
+    return 0.5 * v0;
+}
 
 // Array to hold floating atmospheric elements (clouds, debris, etc)
 const floatingObjects = [];
@@ -248,6 +257,7 @@ function render() {
             rocket.y = canvas.height - rocket.height;
             // Reset ramping state on landing (success or crash)
             rampStartTime = null;
+            fullProgress = false;
             if (rocket.velocity > 10) {
                 for (let i = 0; i < 20; i++) {
                     floatingObjects.push({
@@ -272,31 +282,43 @@ function render() {
             document.getElementById('thrustDurationInput').disabled = false;
             document.getElementById('gravitySelect').disabled = false;
             document.getElementById('spaceStatus').textContent = "Status: On Earth";
-        } else if (rocket.fuelMass > 0 && rocket.thrust === 0 && rocket.velocity > 5) {
+        } else if (rocket.fuelMass > 0 && rocket.thrust === 0 && rocket.velocity > 1) {
             const thrustN = parseFloat(document.getElementById('thrustInput').value);
+            const totalMass = parseFloat(document.getElementById('massInput').value) + rocket.fuelMass;
+
             const g = rocket.gravity;
             const v0 = rocket.velocity;
-            const targetLandingVelocity = 8;
-            // rampUpTime is now global
+            const vTarget = 5;
 
-            // Estimate average acceleration during ramp-up
-            const cappedThrustAccel = Math.min(thrustN / totalMass, 50);
-            const avgThrustAccel = cappedThrustAccel * 0.5;
+            const maxThrustAccel = Math.min(thrustN / totalMass, 50);
+            const effectiveRamp = getEffectiveRampUp(maxThrustAccel);
+
             const dragAccel = 0.5 * realCd * crossSectionArea * atmosphereDensity * v0 * v0 / totalMass;
-            const netAccel = avgThrustAccel + g - dragAccel;
+            const netAccel = maxThrustAccel - g + dragAccel;
 
-            let hmin = (v0 * v0 - targetLandingVelocity * targetLandingVelocity) / (2 * netAccel);
-            hmin += v0 * rampUpTime; // add extra distance fallen during ramp-up
+            hMin = (v0 * v0 - vTarget * vTarget) / (2 * netAccel);
+            if (!fullProgress) {
+                hMin += v0 * effectiveRamp;
+            }
 
-            if (altitude <= hmin) {
+            const buffer = getBuffer(v0);
+            
+            if (altitude <= hMin + buffer) {
                 if (rampStartTime === null) {
                     rampStartTime = Date.now();
                 }
 
-                const rampElapsed = (Date.now() - rampStartTime) / 1000; // in seconds
-                const maxThrustAccel = Math.min(thrustN / totalMass, 50);
-                const rampedAccel = Math.min(maxThrustAccel, maxThrustAccel * (rampElapsed / rampUpTime));
-
+                const rampElapsed = (Date.now() - rampStartTime) / 1000;
+                const rampProgress = Math.min(1, rampElapsed / effectiveRamp);
+                if (rampProgress === 1) {
+                    fullProgress = true;
+                }
+                let rampedAccel 
+                if (!fullProgress) {
+                    rampedAccel = maxThrustAccel * rampProgress;
+                } else {
+                    rampedAccel = maxThrustAccel;
+                }
                 rocket.thrust = -rampedAccel;
             }
         }
@@ -329,7 +351,7 @@ function render() {
 
         ctx.fillStyle = 'white';
         ctx.font = '14px Arial';
-        ctx.fillText(`Apogee: ${apogee} m`, rocket.x + rocket.width + 10, apogeeY);
+        ctx.fillText(`Apogee: ${apogee.toFixed(2)} m`, rocket.x + rocket.width + 10, apogeeY);
     }
 
     // Draw and update floating atmospheric objects (clouds, debris)
@@ -418,7 +440,7 @@ function render() {
         ) {
             const apogeeData = new Array(altitudeChart.data.labels.length).fill(null);
             if (apogeeIndex < apogeeData.length) {
-                apogeeData[apogeeIndex] = apogee;
+                apogeeData[apogeeIndex] = parseFloat(apogee.toFixed(2));
             }
             altitudeChart.data.datasets[0].data = apogeeData;
         }
@@ -500,6 +522,7 @@ function launchRocket() {
     const massKg = parseFloat(document.getElementById('massInput').value) + rocket.fuelMass;    // in kilograms
     const acceleration = thrustN / massKg; // F = ma → a = F / m
     rocket.thrust = -acceleration;
+    fullProgress = false;
 }
 
 function resetSimulation() {
@@ -572,7 +595,7 @@ document.getElementById('chartSelector').addEventListener('change', (e) => {
     if (selectedMetric === 'altitude' && apogee !== null && apogeeIndex !== null) {
         const apogeeData = new Array(altitudeChart.data.labels.length).fill(null);
         if (apogeeIndex < apogeeData.length) {
-            apogeeData[apogeeIndex] = apogee;
+            apogeeData[apogeeIndex] = parseFloat(apogee.toFixed(2));
         }
         altitudeChart.data.datasets[0].data = apogeeData;
         altitudeChart.update();
