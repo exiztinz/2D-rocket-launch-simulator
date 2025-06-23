@@ -83,6 +83,7 @@ const metersPerPixel = 0.5; // Adjust this value for realistic scale
 let rampStartTime = null;
 const rampUpTime = 4; // seconds
 let fullProgress = false;
+let reached = false;
 
 // --- Dynamic-ramp helpers ---
 function getEffectiveRampUp(maxAccel) {
@@ -258,6 +259,7 @@ function render() {
             // Reset ramping state on landing (success or crash)
             rampStartTime = null;
             fullProgress = false;
+            reached = false;
             if (rocket.velocity > 10) {
                 for (let i = 0; i < 20; i++) {
                     floatingObjects.push({
@@ -298,12 +300,17 @@ function render() {
 
             hMin = (v0 * v0 - vTarget * vTarget) / (2 * netAccel);
             if (!fullProgress) {
-                hMin += v0 * effectiveRamp;
+                const avgRampAccel = 0.5 * netAccel; //needs to be tested
+                hMin += v0 * effectiveRamp + 0.5 * avgRampAccel * effectiveRamp * effectiveRamp;
+                // hMin += v0 * effectiveRamp;
             }
 
             const buffer = getBuffer(v0);
             
             if (altitude <= hMin + buffer) {
+                reached = true;
+            }
+            if (reached) {
                 if (rampStartTime === null) {
                     rampStartTime = Date.now();
                 }
@@ -313,11 +320,11 @@ function render() {
                 if (rampProgress === 1) {
                     fullProgress = true;
                 }
-                let rampedAccel 
+                let rampedAccel
                 if (!fullProgress) {
                     rampedAccel = maxThrustAccel * rampProgress;
                 } else {
-                    rampedAccel = maxThrustAccel;
+                    rampedAccel = ((v0 ** 2 - vTarget ** 2) / (2 * altitude)) + g - dragAccel;
                 }
                 rocket.thrust = -rampedAccel;
             }
@@ -523,6 +530,7 @@ function launchRocket() {
     const acceleration = thrustN / massKg; // F = ma → a = F / m
     rocket.thrust = -acceleration;
     fullProgress = false;
+    reached = false;
 }
 
 function resetSimulation() {
