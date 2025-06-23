@@ -79,6 +79,10 @@ gravitySelect.addEventListener('change', () => {
 
 const metersPerPixel = 0.5; // Adjust this value for realistic scale
 
+// For ramped landing burn
+let rampStartTime = null;
+const rampUpTime = 4; // seconds
+
 // Array to hold floating atmospheric elements (clouds, debris, etc)
 const floatingObjects = [];
 // Helper to generate a floating object (cloud or debris)
@@ -176,18 +180,18 @@ function render() {
     ctx.translate(0, -cameraOffset);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const altitude = Math.max(0, ((canvas.height - rocket.y - rocket.height) * metersPerPixel).toFixed(2));
+    const altitude = Math.max(0, (canvas.height - rocket.y - rocket.height) * metersPerPixel);
     // Simulate atmosphere density decreasing with altitude, using realistic Mars, Moon, and Earth models
     let atmosphereDensity;
     if (rocket.gravity === 3.71) {
-        // Mars: baseline ~0.020 kg/m³ at surface, scale height ~11,100 m
-        atmosphereDensity = Math.max(0.001, 0.020 * Math.exp(-altitude / 11100));
+        // Mars: ~0.020 kg/m³ at surface, realistic scale height
+        atmosphereDensity = Math.max(0.00001, 0.020 * Math.exp(-altitude / 11100));
     } else if (rocket.gravity === 1.62) {
-        // Moon: approximate near vacuum
-        atmosphereDensity = 0.0001;
+        // Moon: extremely thin exosphere
+        atmosphereDensity = 0.0000000003;
     } else {
-        // Earth: scale height ~8,500 m, sea level ~1.225 kg/m³ (but normalized here)
-        atmosphereDensity = Math.max(0.001, Math.exp(-altitude / 8500));
+        // Earth: 1.225 kg/m³ at sea level, scale height 8500 m
+        atmosphereDensity = Math.max(0.00001, 1.225 * Math.exp(-altitude / 8500));
     }
     const isSpace = altitude >= 100000;
     if (isSpace) {
@@ -242,6 +246,8 @@ function render() {
         if (rocket.y + rocket.height > canvas.height && rocket.isLaunched && !rocket.hasLanded && rocket.velocity > 1) {
             rocket.hasLanded = true;
             rocket.y = canvas.height - rocket.height;
+            // Reset ramping state on landing (success or crash)
+            rampStartTime = null;
             if (rocket.velocity > 10) {
                 for (let i = 0; i < 20; i++) {
                     floatingObjects.push({
@@ -268,23 +274,30 @@ function render() {
             document.getElementById('spaceStatus').textContent = "Status: On Earth";
         } else if (rocket.fuelMass > 0 && rocket.thrust === 0 && rocket.velocity > 5) {
             const thrustN = parseFloat(document.getElementById('thrustInput').value);
-            const dryMass = parseFloat(document.getElementById('massInput').value);
-            const assumedFuelBurnForLanding = Math.min(rocket.fuelMass, 5000);
-            const effectiveMass = dryMass + assumedFuelBurnForLanding;
-            const maxAccel = thrustN / effectiveMass;
-
-            const safeAltitude = Math.max(altitude, 1); // meters
-            const downwardVelocity = rocket.velocity;
             const g = rocket.gravity;
+            const v0 = rocket.velocity;
+            const targetLandingVelocity = 8;
+            // rampUpTime is now global
 
-            const requiredNetAccel = (downwardVelocity * downwardVelocity) / (2 * safeAltitude);
+            // Estimate average acceleration during ramp-up
+            const cappedThrustAccel = Math.min(thrustN / totalMass, 50);
+            const avgThrustAccel = cappedThrustAccel * 0.5;
+            const dragAccel = 0.5 * realCd * crossSectionArea * atmosphereDensity * v0 * v0 / totalMass;
+            const netAccel = avgThrustAccel + g - dragAccel;
 
-            // Use drag as acceleration for landing logic
-            const dragAccel = 0.5 * realCd * crossSectionArea * atmosphereDensity * rocket.velocity * rocket.velocity / effectiveMass;
+            let hmin = (v0 * v0 - targetLandingVelocity * targetLandingVelocity) / (2 * netAccel);
+            hmin += v0 * rampUpTime; // add extra distance fallen during ramp-up
 
-            if (safeAltitude < 3000 && requiredNetAccel <= maxAccel) {
-                const predictedThrust = -(requiredNetAccel + g - dragAccel);
-                rocket.thrust = predictedThrust;
+            if (altitude <= hmin) {
+                if (rampStartTime === null) {
+                    rampStartTime = Date.now();
+                }
+
+                const rampElapsed = (Date.now() - rampStartTime) / 1000; // in seconds
+                const maxThrustAccel = Math.min(thrustN / totalMass, 50);
+                const rampedAccel = Math.min(maxThrustAccel, maxThrustAccel * (rampElapsed / rampUpTime));
+
+                rocket.thrust = -rampedAccel;
             }
         }
 
@@ -351,7 +364,7 @@ function render() {
 
     ctx.restore();
 
-    document.getElementById('altitude').textContent = altitude;
+    document.getElementById('altitude').textContent = altitude.toFixed(2);
     if (altitude >= 100000) {
         document.getElementById('spaceStatus').textContent = "Status: In Space";
     } else if (altitude > 0) {
@@ -524,6 +537,8 @@ function resetSimulation() {
     floatingObjects.length = 0;
 
     altitudeChart.update();
+    // Reset ramping state on simulation reset
+    rampStartTime = null;
 }
 
 // Chart selector dropdown event listener
