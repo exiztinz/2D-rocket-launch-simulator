@@ -78,14 +78,6 @@ y = y + v * dt
 
 ---
 
-## Screenshots
-
-Example:  
-![Launch Screenshot](./assets/launch.png)  
-![Telemetry Graph](./assets/telemetry.png)
-
----
-
 ## Try It Yourself
 
 Clone the repository:  
