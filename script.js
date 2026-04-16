@@ -122,6 +122,8 @@ const ascentVisualBoostFactor = 0.045;
 const ascentVisualBoostMaxPx = 105;
 const descentVisualBoostFactor = 0.035;
 const descentVisualBoostMaxPx = 95;
+const apogeeFadeStartDropM = 0;
+const apogeeFadeEndDropM = 10;
 
 function getGroundTopY() {
     return canvas.height - groundHeight;
@@ -276,6 +278,7 @@ let glowDriftOffsetY = 0;
 
 let apogee = null;
 let apogeeIndex = null;
+let previousVelocity = 0;
 
 // Data arrays for chart metrics
 const altitudeData = [];
@@ -813,15 +816,18 @@ function render() {
             rocket.thrust = -cappedThrustAccel;
         }
 
-        // Apogee detection logic (after drag, before velocity update)
-        if (rocket.velocity > -0.5 && rocket.velocity < 0.5 && rocket.thrust === 0 && apogee === null) {
-            apogee = altitude;
-            apogeeIndex = altitudeChart.data.labels.length - 1;
-            console.log("Apogee reached at", altitude, "meters");
-        }
-
         rocket.velocity += rocket.acceleration * deltaTime;
         rocket.y += rocket.velocity * deltaTime / metersPerPixel;
+
+        // Robust apogee detection: detect transition from upward motion (negative)
+        // to downward motion (positive) after propulsion phase.
+        if (apogee === null && rocket.thrust === 0 && previousVelocity < 0 && rocket.velocity >= 0) {
+            const apogeeAltitude = Math.max(0, (groundTopY - (rocket.y + rocket.height)) * metersPerPixel);
+            apogee = apogeeAltitude;
+            apogeeIndex = altitudeChart.data.labels.length;
+            console.log("Apogee reached at", apogeeAltitude, "meters");
+        }
+        previousVelocity = rocket.velocity;
 
         // Stop the rocket from falling below ground, trigger explosion if high velocity
         if (rocket.y + rocket.height > groundTopY && rocket.isLaunched && !rocket.hasLanded && rocket.velocity > 1) {
@@ -851,6 +857,7 @@ function render() {
             renderRocketY = rocket.y;
             starDriftOffsetY = 0;
             glowDriftOffsetY = 0;
+            previousVelocity = 0;
             document.getElementById('thrustInput').disabled = false;
             document.getElementById('massInput').disabled = false;
             document.getElementById('fuelMassInput').disabled = false;
@@ -900,15 +907,27 @@ function render() {
     drawRocket(renderRocketY);
 
     if (apogee !== null) {
-        const apogeeY = getGroundTopY() - (apogee / metersPerPixel) - rocket.height;
-        ctx.fillStyle = 'yellow';
-        ctx.beginPath();
-        ctx.arc(rocket.x + rocket.width / 2, apogeeY, 5, 0, Math.PI * 2);
-        ctx.fill();
+        const descentSinceApogee = Math.max(0, apogee - altitude);
+        let apogeeAlpha = 1;
+        if (descentSinceApogee > apogeeFadeStartDropM) {
+            const fadeT = Math.min(1, (descentSinceApogee - apogeeFadeStartDropM) / (apogeeFadeEndDropM - apogeeFadeStartDropM));
+            apogeeAlpha = 1 - fadeT;
+        }
 
-        ctx.fillStyle = 'white';
-        ctx.font = '14px Arial';
-        ctx.fillText(`Apogee: ${apogee.toFixed(2)} m`, rocket.x + rocket.width + 10, apogeeY);
+        if (apogeeAlpha > 0) {
+            const markerY = renderRocketY;
+            ctx.save();
+            ctx.globalAlpha = apogeeAlpha;
+            ctx.fillStyle = 'yellow';
+            ctx.beginPath();
+            ctx.arc(rocket.x + rocket.width / 2, markerY, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'white';
+            ctx.font = '14px Arial';
+            ctx.fillText(`Apogee: ${apogee.toFixed(2)} m`, rocket.x + rocket.width + 10, markerY);
+            ctx.restore();
+        }
     }
 
     // Draw and update crash debris particles
@@ -1043,6 +1062,7 @@ function launchRocket() {
     rocket.acceleration = 0;
     apogee = null;
     apogeeIndex = null;
+    previousVelocity = 0;
     cameraOffset = 0;
 
     rocket.y = getRocketPadY();
@@ -1078,6 +1098,7 @@ function resetSimulation() {
     cameraOffset = 0;
     apogee = null;
     apogeeIndex = null;
+    previousVelocity = 0;
     starDriftOffsetY = 0;
     glowDriftOffsetY = 0;
 
