@@ -3,55 +3,82 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rocket Launch Simulator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;700;800&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-    <h1>Rocket Launch Simulator</h1>
-    <div id="controls">
-      <label>Thrust (N): <input type="number" id="thrustInput" value="7600000" step="100000" /></label>
-      <label>Dry Mass (kg): <input type="number" id="massInput" value="22800" step="1000" /></label>
-      <label>Fuel Mass (kg): <input type="number" id="fuelMassInput" value="518500" step="10000" /></label>
-      <label>Thrust Duration (s): <input type="number" id="thrustDurationInput" value="150" step="10" /></label>
-      <label>Gravity:
-        <select id="gravitySelect">
-          <option value="9.81">Earth (9.81 m/s²)</option>
-          <option value="3.71">Mars (3.71 m/s²)</option>
-          <option value="1.62">Moon (1.62 m/s²)</option>
-        </select>
-      </label>
-      <label>Display:
-        <select id="chartSelector">
-          <option value="altitude">Altitude</option>
-          <option value="velocity">Velocity</option>
-          <option value="acceleration">Acceleration</option>
-        </select>
-      </label>
-      <!-- <label for="dragSlider">Drag Coefficient:</label>
-      <input type="range" id="dragSlider" min="0.0001" max="0.003" step="0.0001" value="0.0004">
-      <span id="dragValue">0.0004</span> -->
-      
-      <!-- <div id="debugPanel">
-        <p id="debugThrust">Thrust: </p>
-        <p id="debugDrag">Drag: </p>
-        <p id="debugAccel">Net Accel: </p>
-      </div> -->
-      <button onclick="launchRocket()" id="launchButton">Launch</button>
-      <button onclick="resetSimulation()" id="resetButton">Reset</button>
-    </div>
-    <div id="simulator-container">
-      <canvas id="rocketCanvas" width="600" height="600"></canvas>
-      <canvas id="altitudeChart" width="600" height="600"></canvas>
-    </div>
-    <div id="telemetry">
-        <p>Altitude: <span id="altitude">0</span> m</p>
-        <p>Velocity: <span id="velocity">0</span></p>
-        <p>Acceleration: <span id="acceleration">0</span></p>
-        <p>Flight Time: <span id="time">0</span></p>
-        <p>Fuel Mass: <span id="fuelMass">0</span></p>
-    </div>
-    <p id="spaceStatus">Status: On Earth</p>
+    <div class="scene-glow"></div>
+    <main class="app-shell">
+      <header class="hero">
+        <h1>Rocket Launch Simulator</h1>
+        <p>Tune launch parameters, ignite, and track flight telemetry in real time.</p>
+      </header>
+
+      <section id="controls" class="panel controls-panel">
+        <h2>Mission Setup</h2>
+        <div class="control-grid">
+          <label>Thrust (N)
+            <input type="number" id="thrustInput" value="7600000" step="100000" />
+          </label>
+          <label>Dry Mass (kg)
+            <input type="number" id="massInput" value="22800" step="1000" />
+          </label>
+          <label>Fuel Mass (kg)
+            <input type="number" id="fuelMassInput" value="518500" step="10000" />
+          </label>
+          <label>Thrust Duration (s)
+            <input type="number" id="thrustDurationInput" value="150" step="10" />
+          </label>
+          <label>Gravity
+            <select id="gravitySelect">
+              <option value="9.81">Earth (9.81 m/s²)</option>
+              <option value="3.71">Mars (3.71 m/s²)</option>
+              <option value="1.62">Moon (1.62 m/s²)</option>
+            </select>
+          </label>
+          <label>Display
+            <select id="chartSelector">
+              <option value="altitude">Altitude</option>
+              <option value="velocity">Velocity</option>
+              <option value="acceleration">Acceleration</option>
+            </select>
+          </label>
+        </div>
+        <div class="action-row">
+          <button onclick="launchRocket()" id="launchButton">Launch</button>
+          <button onclick="resetSimulation()" id="resetButton">Reset</button>
+        </div>
+      </section>
+
+      <section id="simulator-container">
+        <div class="panel canvas-panel">
+          <h2>Flight View</h2>
+          <canvas id="rocketCanvas" width="600" height="600"></canvas>
+        </div>
+        <div class="panel canvas-panel">
+          <h2>Telemetry Chart</h2>
+          <canvas id="altitudeChart" width="600" height="600"></canvas>
+        </div>
+      </section>
+
+      <section class="panel telemetry-panel">
+        <h2>Telemetry</h2>
+        <div id="telemetry">
+          <p>Altitude: <span id="altitude">0</span> m</p>
+          <p>Velocity: <span id="velocity">0</span></p>
+          <p>Acceleration: <span id="acceleration">0</span></p>
+          <p>Flight Time: <span id="time">0</span></p>
+          <p>Fuel Mass: <span id="fuelMass">0</span></p>
+        </div>
+        <p id="spaceStatus">Status: On Earth</p>
+      </section>
+    </main>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="script.js"></script>
 </body>
