@@ -1,139 +1,117 @@
-# 2D Rocket Launch Simulator
-A real-time 2D physics simulation of a rocket launch, built from scratch in JavaScript.
+# 3D Launch Trajectory Explorer
 
-This project models realistic rocket flight dynamics—thrust, gravity, drag, mass depletion, and fuel burn—while rendering smooth motion and live telemetry graphs. It serves as an educational tool and a demonstration of simulation architecture, performance optimization, and real-time visualization in the browser.
+A static, data-driven launch visualization built with Three.js and Chart.js.
 
-Live Demo: https://twod-rocket-launch-simulator.onrender.com/
-Source Code: This repository
+This refactor replaces the original 2D manual-input simulator with a preset-based historical mission explorer. It renders an Earth-to-space 3D scene, replaying approximate ascent trajectories from publicly available launch data.
 
----
+## What Changed
 
-## Key Features
+- Rendering migrated from 2D canvas to Three.js.
+- Layout changed to sim-dominant composition:
+	- Left/main: large 3D launch viewport.
+	- Right/sidebar: compact telemetry + mini charts.
+- Mission setup changed from free numeric controls to historical presets.
+- Telemetry now includes mission events and stage timeline markers.
 
-Interactive Launch Environment:
-- Launch and reset controls
-- Real-time flight feedback
-- Adjustable rocket parameters (thrust curve, mass, burn rate, drag coefficient)
+## Features
 
-Realistic Flight Physics:
-- Thrust force
-- Gravity
-- Aerodynamic drag
-- Mass depletion over time
-- Accurate apogee detection using velocity zero-crossing
+- Three.js 3D scene with:
+	- Earth sphere and atmospheric glow.
+	- Launch pad region and rocket model.
+	- Engine plume and evolving trajectory path.
+	- Camera modes: Follow Rocket, Ground Observer, Wide Orbit.
+- Historical preset selector with at least 3 missions:
+	- Saturn V - Apollo 11 class profile.
+	- Space Shuttle - STS-1 class profile.
+	- Falcon 9 - Starlink class profile.
+- Compact telemetry cards:
+	- Altitude, velocity, acceleration, fuel estimate, stage, flight time.
+- Mini charts (Chart.js):
+	- Altitude, velocity, acceleration.
+	- Event markers (Max-Q, MECO, Stage Separation, SECO, etc.).
+- Launch countdown and replay reset.
 
-Live Telemetry Charts (Chart.js):
-- Altitude
-- Velocity
-- Acceleration
-- Fuel remaining
-- Smooth updates every simulation tick
+## Project Structure
 
-Flight Events and States:
-- Fuel depletion shutdown
-- Stage-separation–ready architecture
-- Atmospheric drag simulation
-- Smooth state transitions
+- `index.html` UI shell and app mounting points.
+- `style.css` responsive layout and visual design.
+- `src/app.js` app controller and playback loop.
+- `src/scene/threeScene.js` Three.js scene, camera, and rendering logic.
+- `src/simulation/trajectory.js` approximate trajectory model and event timeline.
+- `src/data/launchPresets.json` normalized historical mission presets.
+- `src/data/launchData.js` preset loading and normalization.
+- `src/data/schema.md` dataset field documentation.
+- `src/ui/charts.js` mini telemetry chart rendering and event markers.
+- `src/ui/telemetry.js` telemetry value formatting and updates.
 
----
+## Data Model
 
-## Architecture Overview
+Each preset includes:
 
-Physics Engine (physics.js):
-- Computes net force, acceleration, velocity, and altitude
-- Models drag, thrust, mass changes, and gravity
-- Performs time-step integration for stable motion
+- Mission metadata: provider, vehicle, mission, launch date, site.
+- Stage-level parameters: burn time, average thrust, mass endpoints, drag proxies.
+- Event timeline labels.
+- Model hints for pitch program and target orbit estimates.
 
-Renderer (render.js):
-- Draws rocket on HTML5 Canvas
-- Uses requestAnimationFrame for smooth animation
-- Renders trajectory, plume, and rocket body
+See `src/data/schema.md` for field-level details.
 
-Simulation Controller (sim.js):
-- Manages Idle → Launch → Coast → Apogee → Descent
-- Sends telemetry to UI and graphs
-- Ensures deterministic simulation timing
+## Modeling Notes
 
-UI Layer (index.html, ui.js):
-- Launch/reset buttons
-- Optional parameter inputs
-- Live telemetry indicators
+The trajectory is an educational approximation, not a certified flight dynamics solver.
 
----
+Implemented simplifications:
 
-## Physics Model (No Code Blocks)
+- Piecewise constant stage thrust.
+- Exponential atmosphere density model.
+- Gravity decreases with altitude via inverse-square relationship.
+- Guidance/pitch represented by smooth heuristic program.
+- Drag uses a single effective coefficient/area per stage.
 
-Net Force Equation:  
-F_net = F_thrust(t) - F_drag(v) - m * g
+## Public Data Sources
 
-Drag Equation:  
-F_drag = 0.5 * rho * C_d * A * v^2
+Preset records were assembled from public references and cross-checked where possible:
 
-Mass Depletion:  
-m(t) = m_dry + m_fuel(t)
+- NASA Apollo mission pages and Saturn V historical documents.
+- NASA Space Shuttle mission summaries and reference material.
+- SpaceX mission pages and publicly released launch information.
+- FAA launch licensing references (public).
+- Public technical summaries for cross-checking values.
 
-Numerical Integration:  
-v = v + a * dt  
-y = y + v * dt
+Source links are included per mission in the app sidebar and in `src/data/launchPresets.json`.
 
----
+## Assumptions And Inferred Values
 
-## Try It Yourself
+- Some thrust, mass, and timing values are averaged or inferred from open literature.
+- Event times are normalized into a staged replay timeline.
+- Falcon 9 profile is modeled as a representative Starlink-class mission, not one exact full-fidelity flight.
+- Orbital targets are treated as approximate reference values for visualization context.
 
-Clone the repository:  
-git clone https://github.com/exiztinz/2D-rocket-launch-simulator  
-cd 2D-rocket-launch-simulator
+## Run Locally
 
-Open:  
-index.html
+Use any static server (recommended). Example with VS Code Live Server:
 
-For best results, run with a static server (such as VS Code Live Server).
+1. Open the repository folder.
+2. Start Live Server on `index.html`.
+3. Use the mission preset dropdown and press Launch.
 
----
+Direct `file://` opening can fail due to browser module and fetch restrictions.
 
-## Tech Stack
+## Known Limitations
 
-- JavaScript  
-- HTML5 Canvas  
-- CSS  
-- Chart.js  
-- requestAnimationFrame  
+- Rocket and Earth visuals are stylized and lightweight, not photoreal.
+- No real-time external API ingestion in this version.
+- No full multi-body orbital mechanics or guidance/control loop.
+- Stage reentry/landing behavior is not modeled.
+- Mobile devices may reduce frame rate during long replays.
 
----
+## Next Improvements
 
-## What I Learned
-
-- How to build a custom physics engine  
-- Techniques for stable numerical integration  
-- Real-time rendering optimization  
-- Modular JavaScript architecture  
-- Dynamic, real-time telemetry visualization  
-- Balancing realism and performance in simulations  
-- Designing interactive scientific tools for the browser  
-
----
-
-## Future Enhancements
-
-Planned:
-- Multi-stage rocket support  
-- PID guidance system  
-- Atmospheric density model  
-- Wind/turbulence simulation  
-- CSV/JSON telemetry export  
-- Improved mobile UI  
-
-Experimental:
-- WebGL rendering  
-- GPU-accelerated physics  
-- Machine learning thrust optimization  
-
----
-
-## Contributions
-Pull requests and suggestions are welcome. Open an issue if you'd like to collaborate.
-
----
+- Add optional Cesium/real map context for launch sites.
+- Add mission export (CSV/JSON telemetry snapshots).
+- Add finer stage-specific events (fairing sep, boostback, relight).
+- Add uncertainty bands for inferred parameters.
+- Add adaptive quality scaling for low-power devices.
 
 ## License
-MIT License — free to use, modify, and distribute.
+
+MIT License.

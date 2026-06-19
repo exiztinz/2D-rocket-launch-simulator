@@ -2,85 +2,98 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rocket Launch Simulator</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;700;800&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Launch Trajectory Explorer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
-    <div class="scene-glow"></div>
-    <main class="app-shell">
-      <header class="hero">
-        <h1>Rocket Launch Simulator</h1>
-        <p>Tune launch parameters, ignite, and track flight telemetry in real time.</p>
-      </header>
+  <div class="scene-overlay"></div>
+  <main class="layout-shell">
+    <header class="topbar panel">
+      <div>
+        <h1>3D Launch Trajectory Explorer</h1>
+        <p>Historical mission presets with approximate ascent replay from Earth to orbit.</p>
+      </div>
+      <div class="controls-inline">
+        <label>
+          Launch Preset
+          <select id="presetSelect"></select>
+        </label>
+        <label>
+          Camera
+          <select id="cameraSelect">
+            <option value="follow">Follow Rocket</option>
+            <option value="ground">Ground Observer</option>
+            <option value="orbit">Wide Orbit</option>
+            <option value="free">Free Orbit (Drag)</option>
+          </select>
+        </label>
+        <button id="fastForwardButton" class="btn-ghost">Fast Forward 4x</button>
+        <button id="launchButton">Launch</button>
+        <button id="resetButton" class="btn-ghost">Reset</button>
+        <span id="speedBadge" class="pill subtle">Speed: 1x</span>
+      </div>
+    </header>
 
-      <section id="controls" class="panel controls-panel">
-        <h2>Mission Setup</h2>
-        <div class="control-grid">
-          <label>Thrust (N)
-            <input type="number" id="thrustInput" value="7600000" step="100000" />
-          </label>
-          <label>Dry Mass (kg)
-            <input type="number" id="massInput" value="22800" step="1000" />
-          </label>
-          <label>Fuel Mass (kg)
-            <input type="number" id="fuelMassInput" value="518500" step="10000" />
-          </label>
-          <label>Thrust Duration (s)
-            <input type="number" id="thrustDurationInput" value="150" step="10" />
-          </label>
-          <label>Gravity
-            <select id="gravitySelect">
-              <option value="9.81">Earth (9.81 m/s²)</option>
-              <option value="3.71">Mars (3.71 m/s²)</option>
-              <option value="1.62">Moon (1.62 m/s²)</option>
-            </select>
-          </label>
-          <label>Display
-            <select id="chartSelector">
-              <option value="altitude">Altitude</option>
-              <option value="velocity">Velocity</option>
-              <option value="acceleration">Acceleration</option>
-            </select>
-          </label>
+    <section class="content-grid">
+      <article class="viewport-card panel">
+        <div class="badge-row">
+          <span id="countdownLabel" class="pill">READY</span>
+          <span class="pill subtle" id="missionMeta">Loading mission profile...</span>
         </div>
-        <div class="action-row">
-          <button onclick="launchRocket()" id="launchButton">Launch</button>
-          <button onclick="resetSimulation()" id="resetButton">Reset</button>
-        </div>
-      </section>
+        <canvas id="sim3dCanvas"></canvas>
+      </article>
 
-      <section id="simulator-container">
-        <div class="panel canvas-panel">
-          <h2>Flight View</h2>
-          <canvas id="rocketCanvas" width="600" height="600"></canvas>
-        </div>
-        <div class="panel canvas-panel">
-          <h2>Telemetry Chart</h2>
-          <canvas id="altitudeChart" width="600" height="600"></canvas>
-        </div>
-      </section>
+      <aside class="sidebar panel">
+        <section class="mission-meta">
+          <h2 id="missionName">Mission</h2>
+          <p><strong>Orbit:</strong> <span id="missionOrbit">-</span></p>
+          <p><strong>Site:</strong> <span id="missionLocation">-</span></p>
+          <p><strong>Date:</strong> <span id="missionDate">-</span></p>
+          <p class="source-links" id="missionSource"></p>
+        </section>
 
-      <section class="panel telemetry-panel">
-        <h2>Telemetry</h2>
-        <div id="telemetry">
-          <p>Altitude: <span id="altitude">0</span> m</p>
-          <p>Velocity: <span id="velocity">0</span></p>
-          <p>Acceleration: <span id="acceleration">0</span></p>
-          <p>Flight Time: <span id="time">0</span></p>
-          <p>Fuel Mass: <span id="fuelMass">0</span></p>
-        </div>
-        <p id="spaceStatus">Status: On Earth</p>
-      </section>
-    </main>
+        <section class="telemetry-mini" aria-label="Telemetry">
+          <div class="telemetry-item"><span>Altitude</span><strong id="telemetryAltitude">0 m</strong></div>
+          <div class="telemetry-item"><span>Velocity</span><strong id="telemetryVelocity">0 m/s</strong></div>
+          <div class="telemetry-item"><span>Total Accel.</span><strong id="telemetryAccelerationTotal">0 m/s²</strong></div>
+          <div class="telemetry-item"><span>Vertical Accel.</span><strong id="telemetryAcceleration">0 m/s²</strong></div>
+          <div class="telemetry-item"><span>Fuel est.</span><strong id="telemetryFuel">0 kg</strong></div>
+          <div class="telemetry-item"><span>Stage</span><strong id="telemetryStage">Idle</strong></div>
+          <div class="telemetry-item"><span>Flight Time</span><strong id="telemetryTime">0 s</strong></div>
+        </section>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="script.js"></script>
+        <section class="charts-stack">
+          <div class="chart-card">
+            <h3>Altitude</h3>
+            <div class="chart-frame">
+              <canvas id="altitudeChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>Velocity</h3>
+            <div class="chart-frame">
+              <canvas id="velocityChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>Total Acceleration</h3>
+            <div class="chart-frame">
+              <canvas id="accelChart"></canvas>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script type="module" src="./src/app.js"></script>
 </body>
 
 </html>

@@ -1,0 +1,193 @@
+[
+  {
+    "id": "saturn-v-apollo-11",
+    "name": "Saturn V - Apollo 11",
+    "provider": "NASA",
+    "vehicle": "Saturn V",
+    "mission": "Apollo 11",
+    "launchDate": "1969-07-16",
+    "destination": "Trans-Lunar Injection",
+    "orbitClass": "LEO parking then TLI",
+    "source": [
+      "NASA Apollo 11 Press Kit",
+      "NASA Saturn V fact sheets",
+      "Encyclopaedia Astronautica (cross-check)"
+    ],
+    "sourceUrls": [
+      "https://www.nasa.gov/mission_pages/apollo/missions/apollo11.html",
+      "https://history.nasa.gov/SP-4029/Apollo_11a_Saturn_V.htm"
+    ],
+    "location": {
+      "site": "Kennedy Space Center LC-39A",
+      "lat": 28.6084,
+      "lon": -80.6043
+    },
+    "stages": [
+      {
+        "name": "S-IC",
+        "burnTimeSec": 168,
+        "avgThrustN": 34000000,
+        "startMassKg": 2290000,
+        "endMassKg": 130000,
+        "cd": 0.35,
+        "areaM2": 79,
+        "events": [
+          { "timeSec": 168, "label": "MECO / Stage Sep" }
+        ]
+      },
+      {
+        "name": "S-II",
+        "burnTimeSec": 360,
+        "avgThrustN": 5100000,
+        "startMassKg": 480000,
+        "endMassKg": 40000,
+        "cd": 0.28,
+        "areaM2": 44,
+        "events": [
+          { "timeSec": 360, "label": "S-II Shutdown / Stage Sep" }
+        ]
+      },
+      {
+        "name": "S-IVB",
+        "burnTimeSec": 165,
+        "avgThrustN": 1000000,
+        "startMassKg": 120000,
+        "endMassKg": 13500,
+        "cd": 0.22,
+        "areaM2": 28,
+        "events": [
+          { "timeSec": 165, "label": "S-IVB Cutoff" }
+        ]
+      }
+    ],
+    "modelHints": {
+      "pitchProgramSec": 15,
+      "maxPitchDeg": 75,
+      "targetApogeeM": 185000,
+      "targetPerigeeM": 183000,
+      "peakAltitudeM": 190000
+    }
+  },
+  {
+    "id": "space-shuttle-sts-1",
+    "name": "Space Shuttle - STS-1",
+    "provider": "NASA",
+    "vehicle": "Space Shuttle Columbia",
+    "mission": "STS-1",
+    "launchDate": "1981-04-12",
+    "destination": "Low Earth Orbit",
+    "orbitClass": "LEO",
+    "source": [
+      "NASA STS-1 Mission Summary",
+      "NASA Shuttle Reference Manual"
+    ],
+    "sourceUrls": [
+      "https://www.nasa.gov/mission_pages/shuttle/shuttlemissions/archives/sts-1.html",
+      "https://www.nasa.gov/reference/space-shuttle/"
+    ],
+    "location": {
+      "site": "Kennedy Space Center LC-39A",
+      "lat": 28.6084,
+      "lon": -80.6043
+    },
+    "stages": [
+      {
+        "name": "SRB + SSME Ascent",
+        "burnTimeSec": 124,
+        "avgThrustN": 30000000,
+        "startMassKg": 2030000,
+        "endMassKg": 840000,
+        "cd": 0.46,
+        "areaM2": 85,
+        "events": [
+          { "timeSec": 124, "label": "SRB Separation" }
+        ]
+      },
+      {
+        "name": "External Tank / Main Engines",
+        "burnTimeSec": 390,
+        "avgThrustN": 5300000,
+        "startMassKg": 840000,
+        "endMassKg": 110000,
+        "cd": 0.24,
+        "areaM2": 52,
+        "events": [
+          { "timeSec": 390, "label": "MECO" }
+        ]
+      }
+    ],
+    "modelHints": {
+      "pitchProgramSec": 12,
+      "maxPitchDeg": 68,
+      "targetApogeeM": 255000,
+      "targetPerigeeM": 240000,
+      "peakAltitudeM": 260000,
+      "returnsToEarth": true,
+      "returnProfile": {
+        "coastBeforeReturnSec": 2400,
+        "entryLeadSec": 900,
+        "descentDurationSec": 3600
+      }
+    }
+  },
+  {
+    "id": "falcon-9-starlink",
+    "name": "Falcon 9 - Starlink Class",
+    "provider": "SpaceX",
+    "vehicle": "Falcon 9 Block 5",
+    "mission": "Starlink deployment profile",
+    "launchDate": "2025-03-04",
+    "destination": "Low Earth Orbit",
+    "orbitClass": "LEO",
+    "source": [
+      "SpaceX mission updates",
+      "FAA launch license summaries",
+      "Everyday Astronaut public technical references (cross-check)"
+    ],
+    "sourceUrls": [
+      "https://www.spacex.com/launches/",
+      "https://www.faa.gov/space/licensing",
+      "https://everydayastronaut.com/falcon-9-block-5/"
+    ],
+    "location": {
+      "site": "Cape Canaveral SLC-40",
+      "lat": 28.5619,
+      "lon": -80.5772
+    },
+    "stages": [
+      {
+        "name": "Stage 1",
+        "burnTimeSec": 162,
+        "avgThrustN": 7607000,
+        "startMassKg": 549054,
+        "endMassKg": 125000,
+        "cd": 0.33,
+        "areaM2": 10.5,
+        "events": [
+          { "timeSec": 154, "label": "Max-Q" },
+          { "timeSec": 162, "label": "MECO" },
+          { "timeSec": 165, "label": "Stage Sep" }
+        ]
+      },
+      {
+        "name": "Stage 2",
+        "burnTimeSec": 390,
+        "avgThrustN": 934000,
+        "startMassKg": 111500,
+        "endMassKg": 4000,
+        "cd": 0.18,
+        "areaM2": 4.5,
+        "events": [
+          { "timeSec": 390, "label": "SECO" }
+        ]
+      }
+    ],
+    "modelHints": {
+      "pitchProgramSec": 11,
+      "maxPitchDeg": 77,
+      "targetApogeeM": 550000,
+      "targetPerigeeM": 520000,
+      "peakAltitudeM": 560000
+    }
+  }
+]
