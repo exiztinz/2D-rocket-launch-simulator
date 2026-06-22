@@ -1,0 +1,83 @@
+{
+  "saturn-v-apollo-11": {
+    "maxAlt": 7795157.858207714,
+    "maxVel": 12444.622468503274,
+    "maxAcc": 74.29568561447893,
+    "events": [
+      {
+        "label": "MECO / Stage Sep",
+        "timeSec": 168
+      },
+      {
+        "label": "S-II Shutdown / Stage Sep",
+        "timeSec": 528
+      },
+      {
+        "label": "S-IVB Cutoff",
+        "timeSec": 693
+      },
+      {
+        "label": "Orbital Coast",
+        "timeSec": 813
+      }
+    ]
+  },
+  "space-shuttle-sts-1": {
+    "maxAlt": 215385.36306132283,
+    "maxVel": 6410.339807160043,
+    "maxAcc": 58.355240121512445,
+    "events": [
+      {
+        "label": "SRB Separation",
+        "timeSec": 124
+      },
+      {
+        "label": "MECO",
+        "timeSec": 514
+      },
+      {
+        "label": "Orbital Coast",
+        "timeSec": 634
+      },
+      {
+        "label": "Deorbit Burn",
+        "timeSec": 2914
+      },
+      {
+        "label": "Entry Interface",
+        "timeSec": 3814
+      },
+      {
+        "label": "Landing",
+        "timeSec": 6514
+      }
+    ]
+  },
+  "falcon-9-starlink": {
+    "maxAlt": 6910588.180605009,
+    "maxVel": 13405.01429466722,
+    "maxAcc": 241.02555925346832,
+    "events": [
+      {
+        "label": "Max-Q",
+        "timeSec": 154
+      },
+      {
+        "label": "MECO",
+        "timeSec": 162
+      },
+      {
+        "label": "Stage Sep",
+        "timeSec": 165
+      },
+      {
+        "label": "SECO",
+        "timeSec": 552
+      },
+      {
+        "label": "Orbital Coast",
+        "timeSec": 672
+      }
+    ]
+  }
+}

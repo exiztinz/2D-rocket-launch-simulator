@@ -9,13 +9,21 @@
     "destination": "Trans-Lunar Injection",
     "orbitClass": "LEO parking then TLI",
     "source": [
-      "NASA Apollo 11 Press Kit",
-      "NASA Saturn V fact sheets",
-      "Encyclopaedia Astronautica (cross-check)"
+      "NASA Apollo 11 Mission Overview",
+      "NASA SP-4029 Saturn V chronology",
+      "NASA Saturn V News Reference"
     ],
     "sourceUrls": [
       "https://www.nasa.gov/mission_pages/apollo/missions/apollo11.html",
-      "https://history.nasa.gov/SP-4029/Apollo_11a_Saturn_V.htm"
+      "https://history.nasa.gov/SP-4029/Apollo_11a_Saturn_V.htm",
+      "https://history.nasa.gov/afj/ap11fj/01launch.html"
+    ],
+    "historicalConfidence": "high",
+    "historicalNotes": [
+      "Stage burn timing and staging sequence are sourced from Apollo 11 launch timelines.",
+      "Stage masses are stack-level approximations constrained to preserve continuity in a 2D educational model.",
+      "Thrust and mass-flow profiles are inferred piecewise approximations of known throttle/tailoff behavior.",
+      "The simplified constant-pitch heuristic (82 deg max) cannot fully replicate the Saturn V gravity-turn trajectory. The S-IVB burn-end altitude is ~35 km below historical due to net-downward force during the near-horizontal S-IVB phase; insertion velocity error is ~5% high for the same reason. Both are residual structural limitations of the heuristic guidance model."
     ],
     "location": {
       "site": "Kennedy Space Center LC-39A",
@@ -25,47 +33,88 @@
     "stages": [
       {
         "name": "S-IC",
-        "burnTimeSec": 168,
-        "avgThrustN": 34000000,
-        "startMassKg": 2290000,
-        "endMassKg": 130000,
+        "burnTimeSec": 162,
+        "avgThrustN": 35100000,
+        "startMassKg": 2965000,
+        "endMassKg": 543000,
         "cd": 0.35,
         "areaM2": 79,
+        "thrustProfile": [
+          { "untilSec": 30, "scale": 0.95 },
+          { "untilSec": 125, "scale": 1.0 },
+          { "untilSec": 154, "scale": 0.93 },
+          { "untilSec": 162, "scale": 0.72 }
+        ],
+        "massFlowProfile": [
+          { "untilSec": 90, "scale": 0.95 },
+          { "untilSec": 145, "scale": 1.0 },
+          { "untilSec": 162, "scale": 1.08 }
+        ],
         "events": [
-          { "timeSec": 168, "label": "MECO / Stage Sep" }
+          { "timeSec": 161, "label": "MECO" },
+          { "timeSec": 162, "label": "Stage Sep" }
         ]
       },
       {
         "name": "S-II",
-        "burnTimeSec": 360,
+        "burnTimeSec": 367,
         "avgThrustN": 5100000,
-        "startMassKg": 480000,
-        "endMassKg": 40000,
+        "startMassKg": 543000,
+        "endMassKg": 190000,
         "cd": 0.28,
         "areaM2": 44,
+        "thrustProfile": [
+          { "untilSec": 45, "scale": 0.9 },
+          { "untilSec": 300, "scale": 1.0 },
+          { "untilSec": 347, "scale": 0.94 },
+          { "untilSec": 367, "scale": 0.85 }
+        ],
+        "massFlowProfile": [
+          { "untilSec": 220, "scale": 1.0 },
+          { "untilSec": 320, "scale": 0.96 },
+          { "untilSec": 367, "scale": 1.05 }
+        ],
         "events": [
-          { "timeSec": 360, "label": "S-II Shutdown / Stage Sep" }
+          { "timeSec": 367, "label": "S-II Shutdown" },
+          { "timeSec": 369, "label": "Stage Sep" }
         ]
       },
       {
         "name": "S-IVB",
         "burnTimeSec": 165,
-        "avgThrustN": 1000000,
-        "startMassKg": 120000,
-        "endMassKg": 13500,
+        "avgThrustN": 950000,
+        "startMassKg": 190000,
+        "endMassKg": 142000,
         "cd": 0.22,
         "areaM2": 28,
+        "thrustProfile": [
+          { "untilSec": 18, "scale": 0.82 },
+          { "untilSec": 145, "scale": 1.0 },
+          { "untilSec": 165, "scale": 0.88 }
+        ],
+        "massFlowProfile": [
+          { "untilSec": 140, "scale": 0.97 },
+          { "untilSec": 165, "scale": 1.12 }
+        ],
         "events": [
-          { "timeSec": 165, "label": "S-IVB Cutoff" }
+          { "timeSec": 165, "label": "S-IVB Cutoff (Orbit Insertion)" }
         ]
       }
     ],
     "modelHints": {
       "pitchProgramSec": 15,
-      "maxPitchDeg": 75,
-      "targetApogeeM": 185000,
+      "maxPitchDeg": 82,
+      "targetApogeeM": 191000,
       "targetPerigeeM": 183000,
-      "peakAltitudeM": 190000
+      "peakAltitudeM": 191000,
+      "coastDurationSec": 1200,
+      "historicalMilestones": {
+        "mecoTimeSec": 161,
+        "stageSeparationTimeSec": 162,
+        "orbitInsertionEventLabel": "S-IVB Cutoff (Orbit Insertion)",
+        "orbitInsertionAltitudeM": 190000,
+        "orbitInsertionVelocityMps": 7800
+      }
     }
   },
   {
@@ -79,11 +128,19 @@
     "orbitClass": "LEO",
     "source": [
       "NASA STS-1 Mission Summary",
-      "NASA Shuttle Reference Manual"
+      "NASA Space Shuttle Reference",
+      "NASA Flight chronology for STS era"
     ],
     "sourceUrls": [
       "https://www.nasa.gov/mission_pages/shuttle/shuttlemissions/archives/sts-1.html",
-      "https://www.nasa.gov/reference/space-shuttle/"
+      "https://www.nasa.gov/reference/space-shuttle/",
+      "https://science.ksc.nasa.gov/shuttle/missions/sts-1/mission-sts-1.html"
+    ],
+    "historicalConfidence": "medium",
+    "historicalNotes": [
+      "Major ascent milestones (SRB sep and MECO timing) are sourced from NASA mission chronologies.",
+      "Integrated stack masses are approximated for a two-stage educational abstraction.",
+      "Piecewise profile captures throttle bucket and end-of-burn tailoff behavior heuristically."
     ],
     "location": {
       "site": "Kennedy Space Center LC-39A",
@@ -94,11 +151,21 @@
       {
         "name": "SRB + SSME Ascent",
         "burnTimeSec": 124,
-        "avgThrustN": 30000000,
+        "avgThrustN": 30300000,
         "startMassKg": 2030000,
-        "endMassKg": 840000,
+        "endMassKg": 760000,
         "cd": 0.46,
         "areaM2": 85,
+        "thrustProfile": [
+          { "untilSec": 26, "scale": 0.92 },
+          { "untilSec": 80, "scale": 1.0 },
+          { "untilSec": 110, "scale": 0.9 },
+          { "untilSec": 124, "scale": 0.7 }
+        ],
+        "massFlowProfile": [
+          { "untilSec": 90, "scale": 0.95 },
+          { "untilSec": 124, "scale": 1.15 }
+        ],
         "events": [
           { "timeSec": 124, "label": "SRB Separation" }
         ]
@@ -106,11 +173,20 @@
       {
         "name": "External Tank / Main Engines",
         "burnTimeSec": 390,
-        "avgThrustN": 5300000,
-        "startMassKg": 840000,
+        "avgThrustN": 6600000,
+        "startMassKg": 760000,
         "endMassKg": 110000,
         "cd": 0.24,
         "areaM2": 52,
+        "thrustProfile": [
+          { "untilSec": 90, "scale": 0.95 },
+          { "untilSec": 330, "scale": 1.0 },
+          { "untilSec": 390, "scale": 0.9 }
+        ],
+        "massFlowProfile": [
+          { "untilSec": 320, "scale": 0.98 },
+          { "untilSec": 390, "scale": 1.1 }
+        ],
         "events": [
           { "timeSec": 390, "label": "MECO" }
         ]
@@ -118,15 +194,23 @@
     ],
     "modelHints": {
       "pitchProgramSec": 12,
-      "maxPitchDeg": 68,
+      "maxPitchDeg": 76,
       "targetApogeeM": 255000,
       "targetPerigeeM": 240000,
       "peakAltitudeM": 260000,
+      "coastDurationSec": 1400,
       "returnsToEarth": true,
       "returnProfile": {
         "coastBeforeReturnSec": 2400,
         "entryLeadSec": 900,
         "descentDurationSec": 3600
+      },
+      "historicalMilestones": {
+        "mecoTimeSec": 514,
+        "stageSeparationTimeSec": 124,
+        "orbitInsertionEventLabel": "MECO",
+        "orbitInsertionAltitudeM": 120000,
+        "orbitInsertionVelocityMps": 7800
       }
     }
   },
@@ -140,14 +224,21 @@
     "destination": "Low Earth Orbit",
     "orbitClass": "LEO",
     "source": [
-      "SpaceX mission updates",
-      "FAA launch license summaries",
-      "Everyday Astronaut public technical references (cross-check)"
+      "SpaceX launch archive",
+      "FAA launch licensing references",
+      "Public Falcon 9 technical summaries"
     ],
     "sourceUrls": [
       "https://www.spacex.com/launches/",
       "https://www.faa.gov/space/licensing",
       "https://everydayastronaut.com/falcon-9-block-5/"
+    ],
+    "historicalConfidence": "medium",
+    "historicalNotes": [
+      "Mission timing is based on a representative Starlink-class Falcon 9 ascent profile.",
+      "Second-stage depletion state is inferred to preserve realistic mass ratio and continuity.",
+      "Throttle and flow profiles are inferred from public webcast timing patterns and technical summaries.",
+      "This model uses a single upper-stage burn. Real Starlink missions use two MVac burns: SECO-1 into a parking orbit (~150 km) then SECO-2 to circularise at ~550 km. The historical milestone reflects the SECO-1 parking-orbit conditions achievable with the single-burn simplified model."
     ],
     "location": {
       "site": "Cape Canaveral SLC-40",
@@ -160,25 +251,45 @@
         "burnTimeSec": 162,
         "avgThrustN": 7607000,
         "startMassKg": 549054,
-        "endMassKg": 125000,
+        "endMassKg": 111500,
         "cd": 0.33,
         "areaM2": 10.5,
+        "thrustProfile": [
+          { "untilSec": 35, "scale": 0.95 },
+          { "untilSec": 68, "scale": 0.84 },
+          { "untilSec": 130, "scale": 0.97 },
+          { "untilSec": 162, "scale": 1.0 }
+        ],
+        "massFlowProfile": [
+          { "untilSec": 70, "scale": 0.9 },
+          { "untilSec": 150, "scale": 1.02 },
+          { "untilSec": 162, "scale": 1.08 }
+        ],
         "events": [
-          { "timeSec": 154, "label": "Max-Q" },
+          { "timeSec": 68, "label": "Max-Q" },
           { "timeSec": 162, "label": "MECO" },
           { "timeSec": 165, "label": "Stage Sep" }
         ]
       },
       {
         "name": "Stage 2",
-        "burnTimeSec": 390,
-        "avgThrustN": 934000,
+        "burnTimeSec": 378,
+        "avgThrustN": 880000,
         "startMassKg": 111500,
-        "endMassKg": 4000,
+        "endMassKg": 21000,
         "cd": 0.18,
         "areaM2": 4.5,
+        "thrustProfile": [
+          { "untilSec": 20, "scale": 0.84 },
+          { "untilSec": 340, "scale": 1.0 },
+          { "untilSec": 378, "scale": 0.92 }
+        ],
+        "massFlowProfile": [
+          { "untilSec": 320, "scale": 0.98 },
+          { "untilSec": 378, "scale": 1.08 }
+        ],
         "events": [
-          { "timeSec": 390, "label": "SECO" }
+          { "timeSec": 378, "label": "SECO" }
         ]
       }
     ],
@@ -187,7 +298,15 @@
       "maxPitchDeg": 77,
       "targetApogeeM": 550000,
       "targetPerigeeM": 520000,
-      "peakAltitudeM": 560000
+      "peakAltitudeM": 560000,
+      "coastDurationSec": 900,
+      "historicalMilestones": {
+        "mecoTimeSec": 162,
+        "stageSeparationTimeSec": 165,
+        "orbitInsertionEventLabel": "SECO",
+        "orbitInsertionAltitudeM": 440000,
+        "orbitInsertionVelocityMps": 7600
+      }
     }
   }
 ]

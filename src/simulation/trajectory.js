@@ -1,5 +1,6 @@
 const G0 = 9.80665;
 const EARTH_RADIUS_M = 6371000;
+const EARTH_MU = G0 * EARTH_RADIUS_M * EARTH_RADIUS_M;
 const DT = 0.05;
 
 function smoothstep(edge0, edge1, x) {
@@ -32,14 +33,103 @@ function buildTimeline(stages) {
   return timeline;
 }
 
+function normalizeStagesForSimulation(rawStages) {
+  const stages = rawStages.map((stage) => ({ ...stage }));
+
+  return stages.map((stage) => {
+    const startMassKg = Math.max(1, stage.startMassKg);
+    const endMassKg = clamp(stage.endMassKg, 1, startMassKg);
+    const burnTimeSec = Math.max(0.001, stage.burnTimeSec);
+    return {
+      ...stage,
+      startMassKg,
+      endMassKg,
+      burnTimeSec,
+      thrustProfileNormalized: normalizeProfile(stage.thrustProfile),
+      massFlowProfileNormalized: normalizeProfile(stage.massFlowProfile)
+    };
+  });
+}
+
+function normalizeProfile(profile) {
+  if (!Array.isArray(profile) || profile.length === 0) return null;
+  const sorted = [...profile]
+    .filter((entry) => Number.isFinite(entry.untilSec) && Number.isFinite(entry.scale) && entry.untilSec > 0 && entry.scale > 0)
+    .sort((a, b) => a.untilSec - b.untilSec);
+  return sorted.length > 0 ? sorted : null;
+}
+
+function scaleFromProfile(profile, elapsedSec, defaultScale = 1) {
+  if (!profile) return defaultScale;
+  for (const entry of profile) {
+    if (elapsedSec <= entry.untilSec) {
+      return entry.scale;
+    }
+  }
+  return profile[profile.length - 1].scale;
+}
+
+function weightedBurnProgress(profile, elapsedSec, burnTimeSec) {
+  if (!profile) {
+    return clamp(elapsedSec / burnTimeSec, 0, 1);
+  }
+
+  const clampedElapsed = clamp(elapsedSec, 0, burnTimeSec);
+  let totalWeighted = 0;
+  let consumedWeighted = 0;
+  let startSec = 0;
+
+  for (const entry of profile) {
+    const endSec = clamp(entry.untilSec, startSec, burnTimeSec);
+    const segmentDuration = Math.max(0, endSec - startSec);
+    const weightedDuration = segmentDuration * entry.scale;
+    totalWeighted += weightedDuration;
+
+    const consumedEnd = clamp(clampedElapsed, startSec, endSec);
+    const consumedDuration = Math.max(0, consumedEnd - startSec);
+    consumedWeighted += consumedDuration * entry.scale;
+
+    startSec = endSec;
+    if (startSec >= burnTimeSec) break;
+  }
+
+  if (startSec < burnTimeSec) {
+    const tailDuration = burnTimeSec - startSec;
+    totalWeighted += tailDuration;
+    const consumedTail = Math.max(0, clampedElapsed - startSec);
+    consumedWeighted += consumedTail;
+  }
+
+  if (totalWeighted <= 0) return 0;
+  return clamp(consumedWeighted / totalWeighted, 0, 1);
+}
+
 function lookupStage(timeline, tSec) {
   return timeline.find((stage) => tSec >= stage.startSec && tSec < stage.endSec) || null;
 }
 
 function stageMassAt(stage, tSec) {
   if (!stage) return 0;
-  const stageProgress = clamp((tSec - stage.startSec) / stage.burnTimeSec, 0, 1);
+  const localTimeSec = tSec - stage.startSec;
+  const stageProgress = weightedBurnProgress(stage.massFlowProfileNormalized, localTimeSec, stage.burnTimeSec);
   return lerp(stage.startMassKg, stage.endMassKg, stageProgress);
+}
+
+function fuelMassRemainingKg(timeline, tSec) {
+  let remainingKg = 0;
+  for (const stage of timeline) {
+    const propMassKg = Math.max(0, stage.startMassKg - stage.endMassKg);
+    if (tSec <= stage.startSec) {
+      remainingKg += propMassKg;
+      continue;
+    }
+    if (tSec >= stage.endSec) {
+      continue;
+    }
+    const currentMassKg = stageMassAt(stage, tSec);
+    remainingKg += Math.max(0, currentMassKg - stage.endMassKg);
+  }
+  return remainingKg;
 }
 
 function guidancePitchRad(timeSec, hints) {
@@ -84,7 +174,8 @@ function collectEvents(preset, stageTimeline) {
 }
 
 export function buildTrajectory(preset) {
-  const stageTimeline = buildTimeline(preset.stages);
+  const normalizedStages = normalizeStagesForSimulation(preset.stages);
+  const stageTimeline = buildTimeline(normalizedStages);
   const events = collectEvents(preset, stageTimeline);
   const burnoutSec = stageTimeline[stageTimeline.length - 1].endSec;
   const returnProfile = preset.modelHints?.returnsToEarth ? preset.modelHints?.returnProfile || {} : null;
@@ -107,7 +198,7 @@ export function buildTrajectory(preset) {
 
   const samples = [];
   let altitudeM = 0;
-  let horizontalM = 0;
+  let thetaRad = 0;
   let velocityVertical = 0;
   let velocityHorizontal = 0;
   let accelerationMps2 = 0;
@@ -119,8 +210,11 @@ export function buildTrajectory(preset) {
     const stage = lookupStage(stageTimeline, tSec);
     const pitchRad = guidancePitchRad(tSec, preset.modelHints);
 
-    const massKg = stage ? stageMassAt(stage, tSec) : preset.stages[preset.stages.length - 1].endMassKg;
-    const rawThrustN = stage ? stage.avgThrustN : 0;
+    const radiusM = EARTH_RADIUS_M + altitudeM;
+    const massKg = stage ? stageMassAt(stage, tSec) : normalizedStages[normalizedStages.length - 1].endMassKg;
+    const stageElapsedSec = stage ? tSec - stage.startSec : 0;
+    const thrustScale = stage ? scaleFromProfile(stage.thrustProfileNormalized, stageElapsedSec, 1) : 0;
+    const rawThrustN = stage ? stage.avgThrustN * thrustScale : 0;
     const thrustN = rawThrustN * throttleFactor(tSec, altitudeM);
     let area = stage ? stage.areaM2 : 2.5;
     let cd = stage ? stage.cd : 0.12;
@@ -143,7 +237,7 @@ export function buildTrajectory(preset) {
     const effectiveCd = cd * transonicBump;
     const dragN = 0.5 * density * effectiveCd * area * speed * speed;
 
-    const gravity = G0 * Math.pow(EARTH_RADIUS_M / (EARTH_RADIUS_M + Math.max(0, altitudeM)), 2);
+    const gravity = EARTH_MU / (radiusM * radiusM);
     const thrustVerticalN = thrustN * Math.cos(pitchRad);
     const thrustHorizontalN = thrustN * Math.sin(pitchRad);
 
@@ -153,8 +247,9 @@ export function buildTrajectory(preset) {
     const netVerticalN = thrustVerticalN - dragVerticalN - massKg * gravity;
     const netHorizontalN = thrustHorizontalN - dragHorizontalN;
 
-    let accelVertical = netVerticalN / Math.max(1000, massKg);
-    let accelHorizontal = netHorizontalN / Math.max(1000, massKg);
+    const safeMassKg = Math.max(1, massKg);
+    let accelVertical = (netVerticalN / safeMassKg) + ((velocityHorizontal * velocityHorizontal) / radiusM);
+    let accelHorizontal = (netHorizontalN / safeMassKg) - ((velocityVertical * velocityHorizontal) / radiusM);
 
     if (returnProfile && tSec >= returnStartSec) {
       accelVertical -= 0.55 * deorbitFactor + 2.2 * entryFactor;
@@ -182,13 +277,19 @@ export function buildTrajectory(preset) {
       }
     }
 
-    altitudeM = Math.max(0, altitudeM + velocityVertical * DT);
-    horizontalM += velocityHorizontal * DT;
+    const updatedRadiusM = Math.max(EARTH_RADIUS_M, radiusM + velocityVertical * DT);
+    altitudeM = updatedRadiusM - EARTH_RADIUS_M;
+    thetaRad += (velocityHorizontal / Math.max(EARTH_RADIUS_M, updatedRadiusM)) * DT;
 
-    const yEarth = EARTH_RADIUS_M + altitudeM;
-    const arcAngle = horizontalM / EARTH_RADIUS_M;
-    const x = Math.sin(arcAngle) * yEarth;
-    const y = Math.cos(arcAngle) * yEarth;
+    const x = Math.sin(thetaRad) * updatedRadiusM;
+    const y = Math.cos(thetaRad) * updatedRadiusM;
+
+    // Velocity components in 2D Cartesian scene frame (radial + tangential decomposition).
+    const vx = velocityVertical * Math.sin(thetaRad) + velocityHorizontal * Math.cos(thetaRad);
+    const vy = velocityVertical * Math.cos(thetaRad) - velocityHorizontal * Math.sin(thetaRad);
+
+    // Normalised thrust 0–1 so the renderer can scale plume intensity correctly.
+    const thrustRatio = engineOn && stage ? clamp(thrustN / Math.max(1, stage.avgThrustN), 0, 1) : 0;
 
     const reachedGround = tSec >= minReturnCheckSec && altitudeM <= 0.1 && velocityVertical <= 0;
 
@@ -199,11 +300,14 @@ export function buildTrajectory(preset) {
         velocityMps: 0,
         accelerationMps2: 0,
         totalAccelerationMps2: 0,
-        fuelMassKg: 0,
+        fuelMassKg: fuelMassRemainingKg(stageTimeline, tSec),
         x,
         y: EARTH_RADIUS_M,
         headingX: x - previousX,
         headingY: EARTH_RADIUS_M - previousY,
+        vx: 0,
+        vy: 0,
+        thrustRatio: 0,
         stageName: 'Landed',
         engineOn: false,
         landed: true
@@ -218,11 +322,14 @@ export function buildTrajectory(preset) {
       velocityMps: Math.hypot(velocityVertical, velocityHorizontal),
       accelerationMps2: accelerationMps2,
       totalAccelerationMps2: Math.hypot(accelVertical, accelHorizontal),
-      fuelMassKg: stage ? Math.max(0, massKg - stage.endMassKg) : 0,
+      fuelMassKg: fuelMassRemainingKg(stageTimeline, tSec),
       x,
       y,
       headingX: x - previousX,
       headingY: y - previousY,
+      vx,
+      vy,
+      thrustRatio,
       stageName: stage ? stage.name : 'Coast',
       engineOn,
       landed: false

@@ -12,6 +12,8 @@ Each launch preset follows this normalized shape:
 - orbitClass: target orbit class
 - source: source label array
 - sourceUrls: reference URL array
+- historicalConfidence: high | medium | low confidence marker
+- historicalNotes: array of known vs inferred modeling notes
 - location: object with site, lat, lon
 
 stages: array of
@@ -22,6 +24,8 @@ stages: array of
 - endMassKg: mass at stage cutoff
 - cd: effective drag coefficient for that phase
 - areaM2: effective cross-sectional area
+- thrustProfile: optional array of { untilSec, scale } piecewise thrust scaling
+- massFlowProfile: optional array of { untilSec, scale } piecewise mass-flow scaling
 - events: array of { timeSec, label }
 
 modelHints:
@@ -30,3 +34,5 @@ modelHints:
 - targetApogeeM: target apogee estimate (meters)
 - targetPerigeeM: target perigee estimate (meters)
 - peakAltitudeM: approximate peak altitude for UI context
+- coastDurationSec: post-burn coast duration used by the replay
+- historicalMilestones: reference milestone values used in calibration reporting

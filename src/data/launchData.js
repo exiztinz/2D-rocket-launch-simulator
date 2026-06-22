@@ -1,4 +1,5 @@
 const DATA_URL = new URL('./launchPresets.json', import.meta.url).href;
+import { validatePreset } from './presetValidation.js';
 
 function normalizeStage(stage, index) {
   return {
@@ -10,6 +11,8 @@ function normalizeStage(stage, index) {
     endMassKg: stage.endMassKg,
     cd: stage.cd,
     areaM2: stage.areaM2,
+    thrustProfile: Array.isArray(stage.thrustProfile) ? stage.thrustProfile : [],
+    massFlowProfile: Array.isArray(stage.massFlowProfile) ? stage.massFlowProfile : [],
     events: Array.isArray(stage.events) ? stage.events : []
   };
 }
@@ -26,9 +29,12 @@ function normalizePreset(rawPreset) {
     orbitClass: rawPreset.orbitClass,
     source: rawPreset.source || [],
     sourceUrls: rawPreset.sourceUrls || [],
+    historicalConfidence: rawPreset.historicalConfidence || 'low',
+    historicalNotes: Array.isArray(rawPreset.historicalNotes) ? rawPreset.historicalNotes : [],
     location: rawPreset.location,
     stages: rawPreset.stages.map((stage, index) => normalizeStage(stage, index)),
-    modelHints: rawPreset.modelHints || {}
+    modelHints: rawPreset.modelHints || {},
+    validation: null
   };
 }
 
@@ -38,5 +44,11 @@ export async function loadLaunchPresets() {
     throw new Error(`Unable to load launch presets from ${DATA_URL}`);
   }
   const payload = await response.json();
-  return payload.map(normalizePreset);
+  const presets = payload.map(normalizePreset);
+
+  for (const preset of presets) {
+    preset.validation = validatePreset(preset);
+  }
+
+  return presets;
 }

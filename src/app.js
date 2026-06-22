@@ -46,6 +46,15 @@ const charts = new TelemetryCharts({
 });
 const telemetry = new TelemetryPanel();
 
+function validationStatusText(validation) {
+  if (!validation) return '';
+  const warnings = validation.warnings?.length || 0;
+  const errors = validation.errors?.length || 0;
+  if (errors > 0) return `Validation: ${errors} error(s), ${warnings} warning(s)`;
+  if (warnings > 0) return `Validation: ${warnings} warning(s)`;
+  return 'Validation: clean';
+}
+
 function updateSpeedBadge() {
   dom.speedBadge.textContent = `Speed: ${state.playbackRate}x`;
   dom.fastForwardButton.textContent = state.playbackRate > 1 ? 'Speed 1x' : 'Fast Forward 8x';
@@ -77,6 +86,9 @@ function interpolateSample(samples, timeSec) {
     y: a.y + (b.y - a.y) * t,
     headingX: a.headingX + (b.headingX - a.headingX) * t,
     headingY: a.headingY + (b.headingY - a.headingY) * t,
+    vx: a.vx + (b.vx - a.vx) * t,
+    vy: a.vy + (b.vy - a.vy) * t,
+    thrustRatio: a.thrustRatio + (b.thrustRatio - a.thrustRatio) * t,
     stageName: t < 0.5 ? a.stageName : b.stageName,
     engineOn: t < 0.5 ? a.engineOn : b.engineOn,
     landed: t >= 0.5 ? Boolean(b.landed) : Boolean(a.landed)
@@ -85,7 +97,9 @@ function interpolateSample(samples, timeSec) {
 
 function renderMissionMetadata(preset) {
   dom.missionName.textContent = preset.name;
-  dom.missionMeta.textContent = `${preset.provider} • ${preset.vehicle} • ${preset.destination}`;
+  const validationText = validationStatusText(preset.validation);
+  const confidenceText = preset.historicalConfidence ? `Historical confidence: ${preset.historicalConfidence}` : '';
+  dom.missionMeta.textContent = `${preset.provider} • ${preset.vehicle} • ${preset.destination}${confidenceText ? ` • ${confidenceText}` : ''}${validationText ? ` • ${validationText}` : ''}`;
   dom.missionOrbit.textContent = preset.orbitClass;
   dom.missionLocation.textContent = `${preset.location.site} (${preset.location.lat.toFixed(2)}, ${preset.location.lon.toFixed(2)})`;
   dom.missionDate.textContent = preset.launchDate;
@@ -99,7 +113,8 @@ function setPreset(presetId) {
   if (!preset) return;
 
   state.selectedPreset = preset;
-  state.trajectory = buildTrajectory(preset);
+  const hasErrors = Boolean(preset.validation?.hasErrors);
+  state.trajectory = hasErrors ? null : buildTrajectory(preset);
   state.frameIndex = 0;
   state.timelineCursor = 0;
   state.completedSample = null;
@@ -111,7 +126,17 @@ function setPreset(presetId) {
   scene.resetPath();
   renderMissionMetadata(preset);
 
-  charts.applyEvents(state.trajectory.samples, state.seenEvents);
+  dom.launchButton.disabled = hasErrors;
+  if (hasErrors) {
+    dom.countdownLabel.textContent = 'BLOCKED';
+    console.error('Preset validation errors:', preset.validation.errors);
+  } else if (preset.validation?.hasWarnings) {
+    console.warn('Preset validation warnings:', preset.validation.warnings);
+  }
+
+  if (state.trajectory) {
+    charts.applyEvents(state.trajectory.samples, state.seenEvents);
+  }
 }
 
 function populatePresetSelect() {
@@ -220,7 +245,10 @@ function animate(nowMs) {
 }
 
 function launch() {
-  if (!state.trajectory) return;
+  if (!state.trajectory) {
+    dom.countdownLabel.textContent = 'BLOCKED';
+    return;
+  }
   state.frameIndex = 0;
   state.timelineCursor = 0;
   state.completedSample = null;

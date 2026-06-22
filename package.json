@@ -1,0 +1,11 @@
+{
+  "name": "rocket-launch-simulator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "regression:check": "node scripts/regression-check.mjs",
+    "baseline:capture": "node scripts/capture-baseline.mjs",
+    "calibration:report": "node scripts/calibration-report.mjs",
+    "visual:check": "node scripts/visual-physics-check.mjs"
+  }
+}

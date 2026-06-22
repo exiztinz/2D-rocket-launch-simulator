@@ -58,14 +58,89 @@ function createChart(ctx, label, color, timelineMarkers) {
           const markerDataset = chart.data.datasets[1];
           const meta = chart.getDatasetMeta(1);
           const ctxRef = chart.ctx;
+          const area = chart.chartArea;
+
           ctxRef.save();
-          ctxRef.fillStyle = '#ffdca1';
           ctxRef.font = '11px Sora';
+
+          // --- Build label layout descriptors ---
+          const FONT_HEIGHT = 12;
+          const PAD_X = 5;   // horizontal gap between dot and label start
+          const PAD_Y = 4;   // minimum vertical gap between label baselines
+          const LEADER_OFFSET = 14; // px from dot to label baseline when staggered
+
+          const labels = [];
           markerDataset.data.forEach((point, index) => {
             const element = meta.data[index];
             if (!element) return;
-            ctxRef.fillText(point.label, element.x + 6, element.y - 7);
+            const textWidth = ctxRef.measureText(point.label).width;
+            labels.push({
+              label: point.label,
+              dotX: element.x,
+              dotY: element.y,
+              textWidth,
+              // Initial preferred position: just above and to the right of the dot.
+              labelX: element.x + PAD_X,
+              labelY: element.y - LEADER_OFFSET
+            });
           });
+
+          // Sort by dotX so we stagger left-to-right predictably.
+          labels.sort((a, b) => a.dotX - b.dotX);
+
+          // --- Collision resolution: push overlapping labels upward ---
+          // Two labels overlap when their x ranges intersect AND y baselines are within FONT_HEIGHT.
+          const MIN_STEP = FONT_HEIGHT + PAD_Y;
+          for (let i = 1; i < labels.length; i += 1) {
+            const curr = labels[i];
+            for (let j = 0; j < i; j += 1) {
+              const prev = labels[j];
+              const xOverlap =
+                curr.labelX < prev.labelX + prev.textWidth + PAD_X &&
+                curr.labelX + curr.textWidth + PAD_X > prev.labelX;
+              const yOverlap = Math.abs(curr.labelY - prev.labelY) < MIN_STEP;
+              if (xOverlap && yOverlap) {
+                // Push current label up by the gap needed to clear the previous one.
+                curr.labelY = prev.labelY - MIN_STEP;
+              }
+            }
+          }
+
+          // --- Clamp to canvas bounds ---
+          for (const item of labels) {
+            // Left boundary.
+            if (item.labelX < area.left) {
+              item.labelX = area.left;
+            }
+            // Right boundary.
+            if (item.labelX + item.textWidth > area.right) {
+              item.labelX = area.right - item.textWidth;
+            }
+            // Top boundary: never clip above the chart area.
+            if (item.labelY - FONT_HEIGHT < area.top) {
+              item.labelY = area.top + FONT_HEIGHT;
+            }
+          }
+
+          // --- Draw leader lines then labels ---
+          for (const item of labels) {
+            const staggered = Math.abs(item.labelY - (item.dotY - LEADER_OFFSET)) > 2;
+
+            if (staggered) {
+              // Line from dot upward to a small tick, then horizontal to label.
+              ctxRef.beginPath();
+              ctxRef.strokeStyle = 'rgba(255, 220, 161, 0.45)';
+              ctxRef.lineWidth = 1;
+              ctxRef.moveTo(item.dotX, item.dotY - 5);
+              ctxRef.lineTo(item.dotX, item.labelY - 2);
+              ctxRef.lineTo(item.labelX - 2, item.labelY - 2);
+              ctxRef.stroke();
+            }
+
+            ctxRef.fillStyle = '#ffdca1';
+            ctxRef.fillText(item.label, item.labelX, item.labelY);
+          }
+
           ctxRef.restore();
         }
       }
@@ -107,7 +182,7 @@ export class TelemetryCharts {
   }
 
   pushSample(sample) {
-    const time = Number(sample.tSec.toFixed(1));
+    const time = Number(sample.tSec.toFixed(2));
 
     this.altitudeChart.data.datasets[0].data.push({ x: time, y: sample.altitudeM });
 

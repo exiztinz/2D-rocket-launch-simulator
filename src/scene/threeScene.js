@@ -73,6 +73,7 @@ function makeRocket() {
   nose.position.y = 6.35;
   rocket.add(nose);
 
+  const fins = [];
   for (let i = 0; i < 4; i += 1) {
     const fin = new THREE.Mesh(
       new THREE.BoxGeometry(0.03, 0.42, 0.2),
@@ -82,6 +83,7 @@ function makeRocket() {
     fin.position.set(Math.cos(angle) * 0.24, 0.22, Math.sin(angle) * 0.24);
     fin.lookAt(fin.position.clone().multiplyScalar(2));
     rocket.add(fin);
+    fins.push(fin);
   }
 
   return { rocket };
@@ -181,7 +183,8 @@ export class LaunchScene {
     this.scene.add(this.rocket);
 
     this.nozzleMount = new THREE.Group();
-    this.nozzleMount.position.set(0, 0.02, 0);
+    // Placed at the bottom of stage1 (stage1 spans y=0 to y=3.2 in rocket-local space).
+    this.nozzleMount.position.set(0, 0, 0);
     this.rocket.add(this.nozzleMount);
 
     this.engineLight = new THREE.PointLight(0xffa552, 0, 24, 2);
@@ -434,27 +437,36 @@ export class LaunchScene {
 
     const radialOutward = this.currentTarget.clone().normalize();
     const onPad = this.pathPoints.length < 2 && sample.altitudeM < 2000 && sample.velocityMps < 40 && !sample.landed;
-    const visualHeading = this.rocket.position.clone().sub(this.previousRocketPosition);
 
+    // Use physics velocity vector (vx, vy) for orientation so the nose points along the
+    // actual velocity direction, not the visually-compressed position delta which
+    // systematically overstates vertical angle during high-horizontal-velocity phases.
     if (onPad) {
       const attitude = new THREE.Quaternion().setFromUnitVectors(ROCKET_NOSE_AXIS, radialOutward);
       this.rocket.quaternion.copy(attitude);
       this.previousDirection.copy(radialOutward);
-    } else if (visualHeading.lengthSq() > 0.0000001) {
-      const noseDirection = visualHeading.normalize();
+    } else if (Number.isFinite(sample.vx) && Number.isFinite(sample.vy) && sample.velocityMps > 0.1) {
+      const noseDirection = new THREE.Vector3(sample.vx, sample.vy, 0).normalize();
       const attitude = new THREE.Quaternion().setFromUnitVectors(ROCKET_NOSE_AXIS, noseDirection);
       this.rocket.quaternion.copy(attitude);
       this.previousDirection.copy(noseDirection);
     } else {
-      const fallbackDirection = this.previousDirection.lengthSq() > 0.0000001 ? this.previousDirection : radialOutward;
+      // Velocity is zero or undefined (e.g. landed, coast edge). Hold the last
+      // known direction so the rocket does not snap to an arbitrary orientation.
+      const fallbackDirection = this.previousDirection.lengthSq() > 0.0000001
+        ? this.previousDirection
+        : radialOutward;
       const attitude = new THREE.Quaternion().setFromUnitVectors(ROCKET_NOSE_AXIS, fallbackDirection);
       this.rocket.quaternion.copy(attitude);
     }
 
+    // Visual stage separation block removed: the generic rocket mesh is not designed
+    // for per-stage body removal, and hiding parts produced a broken half-invisible rocket.
+
     if (appendPath) {
       this.pathPoints.push(new THREE.Vector3(sx, sy, 0));
     }
-    if (this.pathPoints.length >= 2 && this.pathPoints.length % 2 === 0) {
+    if (this.pathPoints.length >= 2) {
       this.pathGeometry.setFromPoints(this.pathPoints);
       this.pathGlowGeometry.setFromPoints(this.pathPoints);
 
@@ -470,8 +482,11 @@ export class LaunchScene {
 
     const thrustVisible = Boolean(sample.engineOn) && sample.altitudeM < 700000;
     if (thrustVisible) {
+      // Scale plume and engine light by actual thrust ratio so visual intensity matches
+      // simulated thrust level (e.g. max-Q throttle-down, end-of-burn tailoff).
+      const thrustRatio = Number.isFinite(sample.thrustRatio) ? Math.max(0.05, sample.thrustRatio) : 1;
       const flicker = 0.75 + Math.sin(performance.now() * 0.022) * 0.17;
-      this.engineLight.intensity = 1.7 + flicker * 1.3;
+      this.engineLight.intensity = (1.7 + flicker * 1.3) * thrustRatio;
       this.plume.visible = true;
       this.plumeCore.visible = true;
       this.plumeCorona.visible = true;
@@ -479,8 +494,8 @@ export class LaunchScene {
       this.plumeBillboard.visible = true;
 
       const altitudeBlend = THREE.MathUtils.clamp(sample.altitudeM / 90000, 0, 1);
-      const plumeLength = THREE.MathUtils.lerp(0.75, 1.12, altitudeBlend);
-      const plumeWidth = THREE.MathUtils.lerp(0.78, 1.22, altitudeBlend);
+      const plumeLength = THREE.MathUtils.lerp(0.75, 1.12, altitudeBlend) * (0.6 + thrustRatio * 0.4);
+      const plumeWidth = THREE.MathUtils.lerp(0.78, 1.22, altitudeBlend) * (0.6 + thrustRatio * 0.4);
       this.plume.scale.set(plumeWidth + flicker * 0.06, plumeLength + flicker * 0.2, plumeWidth + flicker * 0.06);
       this.plumeCore.scale.set(0.72 + flicker * 0.05, 0.72 + flicker * 0.16, 0.72 + flicker * 0.05);
       this.plumeHalo.scale.setScalar(0.86 + flicker * 0.25);

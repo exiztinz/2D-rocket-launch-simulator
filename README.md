@@ -104,6 +104,56 @@ Direct `file://` opening can fail due to browser module and fetch restrictions.
 - Stage reentry/landing behavior is not modeled.
 - Mobile devices may reduce frame rate during long replays.
 
+## Reliability Checks
+
+- Preset validation runs during preset loading.
+- Validation emits structured `errors` and `warnings` per preset and stage.
+- Launch is blocked when a selected preset has validation errors.
+- Launch is allowed when only warnings are present.
+
+Validation checks include:
+
+- Thrust-to-weight sanity at ignition.
+- Stage mass-ratio bounds.
+- Stage continuity between adjacent stages.
+- Invalid non-finite or non-positive thrust/mass/burn values.
+
+### Regression Script
+
+Run all preset regression checks:
+
+```bash
+npm run regression:check
+```
+
+What it checks:
+
+- No NaN/Infinity in generated trajectory samples.
+- Fuel mass is monotonic non-increasing.
+- Total acceleration does not exceed the configured bound.
+
+Optional overrides:
+
+```bash
+npm run regression:check -- --max-accel=120
+npm run regression:check -- --fuel-tolerance=0.0001
+```
+
+## Historical Calibration Workflow
+
+To compare model updates against a saved baseline and mission milestones:
+
+```bash
+npm run baseline:capture
+npm run calibration:report
+```
+
+The calibration report is written to `docs/calibration-report.md` and includes:
+
+- Before/after deltas for apogee, max velocity, max acceleration, and burn-event timing.
+- Historical milestone percent error for MECO, stage separation, and orbit insertion altitude/velocity.
+- Mission-level confidence and source notes (known vs inferred values).
+
 ## Next Improvements
 
 - Add optional Cesium/real map context for launch sites.
