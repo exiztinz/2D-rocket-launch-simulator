@@ -144,6 +144,7 @@ export class LaunchScene {
     this.camera.position.set(6, 64.5, 78);
 
     this.clock = new THREE.Clock();
+    this.lastRenderMs = performance.now();
     this.cameraMode = 'follow';
     this.currentTarget = new THREE.Vector3(0, 56.5, 0);
     this.previousRocketPosition = new THREE.Vector3(0, 56.5, 0);
@@ -160,7 +161,10 @@ export class LaunchScene {
       distance: 38,
       minDistance: 8,
       maxDistance: 260,
-      target: this.currentTarget.clone()
+      target: this.currentTarget.clone(),
+      manualOffset: new THREE.Vector3(0, 0, 0),
+      keyState: new Set(),
+      baseMoveSpeed: 22
     };
 
     const ambient = new THREE.AmbientLight(0x6d8ebd, 0.72);
@@ -332,8 +336,26 @@ export class LaunchScene {
   }
 
   setCameraMode(mode) {
+    if (mode === 'free' && this.cameraMode !== 'free') {
+      this.syncFreeOrbitToCamera();
+    }
     this.cameraMode = mode;
     this.snapCamera();
+  }
+
+  syncFreeOrbitToCamera() {
+    const offset = this.camera.position.clone().sub(this.currentTarget);
+    const distance = Math.max(0.0001, offset.length());
+    const direction = offset.normalize();
+
+    this.freeOrbit.distance = THREE.MathUtils.clamp(
+      distance,
+      this.freeOrbit.minDistance,
+      this.freeOrbit.maxDistance
+    );
+    this.freeOrbit.pitch = THREE.MathUtils.clamp(Math.asin(direction.y), -1.52, 1.52);
+    this.freeOrbit.yaw = Math.atan2(direction.x, direction.z);
+    this.freeOrbit.target.copy(this.currentTarget);
   }
 
   initFreeOrbitControls() {
@@ -347,6 +369,7 @@ export class LaunchScene {
 
     this.canvas.addEventListener('pointermove', (event) => {
       if (this.cameraMode !== 'free' || !this.freeOrbit.dragging) return;
+
       const dx = event.clientX - this.freeOrbit.lastX;
       const dy = event.clientY - this.freeOrbit.lastY;
       this.freeOrbit.lastX = event.clientX;
@@ -375,10 +398,95 @@ export class LaunchScene {
         this.freeOrbit.maxDistance
       );
     }, { passive: false });
+
+    window.addEventListener('keydown', (event) => {
+      const tag = event.target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+      const key = event.code;
+      const isMoveKey = key === 'KeyW'
+        || key === 'KeyA'
+        || key === 'KeyS'
+        || key === 'KeyD'
+        || key === 'ArrowUp'
+        || key === 'ArrowDown'
+        || key === 'ArrowLeft'
+        || key === 'ArrowRight'
+        || key === 'KeyQ'
+        || key === 'KeyE'
+        || key === 'PageUp'
+        || key === 'PageDown'
+        || key === 'ShiftLeft'
+        || key === 'ShiftRight';
+
+      if (!isMoveKey) return;
+      this.freeOrbit.keyState.add(key);
+      if (this.cameraMode === 'free') {
+        event.preventDefault();
+      }
+    });
+
+    window.addEventListener('keyup', (event) => {
+      this.freeOrbit.keyState.delete(event.code);
+    });
+
+    window.addEventListener('blur', () => {
+      this.freeOrbit.keyState.clear();
+      this.freeOrbit.dragging = false;
+    });
   }
 
-  updateFreeOrbitCamera(snap = false) {
-    this.freeOrbit.target.lerp(this.currentTarget, snap ? 1 : 0.12);
+  applyFreeOrbitKeyboardMovement(deltaSec) {
+    if (this.cameraMode !== 'free' || deltaSec <= 0) return;
+
+    const keys = this.freeOrbit.keyState;
+    const forwardInput = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0)
+      - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+    const strafeInput = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0)
+      - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+    const verticalInput = (keys.has('KeyE') || keys.has('PageUp') ? 1 : 0)
+      - (keys.has('KeyQ') || keys.has('PageDown') ? 1 : 0);
+
+    if (forwardInput === 0 && strafeInput === 0 && verticalInput === 0) return;
+
+    const boost = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 2.8 : 1;
+    const zoomScaledSpeed = THREE.MathUtils.lerp(
+      10,
+      120,
+      THREE.MathUtils.clamp(this.freeOrbit.distance / this.freeOrbit.maxDistance, 0, 1)
+    );
+    const moveStep = (this.freeOrbit.baseMoveSpeed + zoomScaledSpeed) * boost * deltaSec;
+
+    const forward = new THREE.Vector3();
+    this.camera.getWorldDirection(forward);
+    if (forward.lengthSq() <= 0.000001) {
+      forward.set(0, 0, -1);
+    } else {
+      forward.normalize();
+    }
+
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const right = new THREE.Vector3().crossVectors(forward, worldUp);
+    if (right.lengthSq() <= 0.000001) {
+      right.set(1, 0, 0);
+    } else {
+      right.normalize();
+    }
+
+    const movement = new THREE.Vector3();
+    if (forwardInput !== 0) movement.addScaledVector(forward, forwardInput);
+    if (strafeInput !== 0) movement.addScaledVector(right, strafeInput);
+    if (verticalInput !== 0) movement.addScaledVector(worldUp, verticalInput);
+
+    if (movement.lengthSq() <= 0.000001) return;
+    movement.normalize().multiplyScalar(moveStep);
+    this.freeOrbit.manualOffset.add(movement);
+  }
+
+  updateFreeOrbitCamera(snap = false, deltaSec = 0) {
+    this.applyFreeOrbitKeyboardMovement(deltaSec);
+    const desiredTarget = this.currentTarget.clone().add(this.freeOrbit.manualOffset);
+    this.freeOrbit.target.lerp(desiredTarget, snap ? 1 : 0.12);
 
     const cp = Math.cos(this.freeOrbit.pitch);
     const sp = Math.sin(this.freeOrbit.pitch);
@@ -432,27 +540,28 @@ export class LaunchScene {
     this.currentTarget.set(sx, sy, 0);
     this.currentAltitudeM = sample.altitudeM;
 
+    const visualMotion = this.rocket.position.clone().sub(this.previousRocketPosition);
+
     const readabilityScale = THREE.MathUtils.lerp(1.04, 0.68, THREE.MathUtils.clamp(sample.altitudeM / 260000, 0, 1));
     this.rocket.scale.setScalar(0.22 * readabilityScale);
 
     const radialOutward = this.currentTarget.clone().normalize();
     const onPad = this.pathPoints.length < 2 && sample.altitudeM < 2000 && sample.velocityMps < 40 && !sample.landed;
 
-    // Use physics velocity vector (vx, vy) for orientation so the nose points along the
-    // actual velocity direction, not the visually-compressed position delta which
-    // systematically overstates vertical angle during high-horizontal-velocity phases.
+    // Drive attitude from the visual motion vector so body/nose alignment matches
+    // the rendered trajectory line exactly in the compressed scene projection.
     if (onPad) {
       const attitude = new THREE.Quaternion().setFromUnitVectors(ROCKET_NOSE_AXIS, radialOutward);
       this.rocket.quaternion.copy(attitude);
       this.previousDirection.copy(radialOutward);
-    } else if (Number.isFinite(sample.vx) && Number.isFinite(sample.vy) && sample.velocityMps > 0.1) {
-      const noseDirection = new THREE.Vector3(sample.vx, sample.vy, 0).normalize();
+    } else if (visualMotion.lengthSq() > 0.0000001) {
+      const noseDirection = visualMotion.normalize();
       const attitude = new THREE.Quaternion().setFromUnitVectors(ROCKET_NOSE_AXIS, noseDirection);
       this.rocket.quaternion.copy(attitude);
       this.previousDirection.copy(noseDirection);
     } else {
-      // Velocity is zero or undefined (e.g. landed, coast edge). Hold the last
-      // known direction so the rocket does not snap to an arbitrary orientation.
+      // When motion is tiny (interpolation edge / duplicate frame), keep the
+      // last visual direction to avoid frame-to-frame orientation source flips.
       const fallbackDirection = this.previousDirection.lengthSq() > 0.0000001
         ? this.previousDirection
         : radialOutward;
@@ -563,7 +672,7 @@ export class LaunchScene {
 
   snapCamera() {
     if (this.cameraMode === 'free') {
-      this.updateFreeOrbitCamera(true);
+      this.updateFreeOrbitCamera(true, 0);
       return;
     }
 
@@ -574,7 +683,7 @@ export class LaunchScene {
 
   updateCamera(snapCamera = false) {
     if (this.cameraMode === 'free') {
-      this.updateFreeOrbitCamera(snapCamera);
+      this.updateFreeOrbitCamera(snapCamera, 0);
       return;
     }
 
@@ -589,9 +698,12 @@ export class LaunchScene {
   }
 
   render() {
+    const nowMs = performance.now();
+    const deltaSec = Math.min(0.05, Math.max(0, (nowMs - this.lastRenderMs) / 1000));
+    this.lastRenderMs = nowMs;
     const t = this.clock.getElapsedTime();
     if (this.cameraMode === 'free') {
-      this.updateFreeOrbitCamera(false);
+      this.updateFreeOrbitCamera(false, deltaSec);
     }
     this.stars.rotation.y += 0.00006;
     this.stars.rotation.x = Math.sin(t * 0.04) * 0.03;

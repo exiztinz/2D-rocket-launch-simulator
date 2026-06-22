@@ -182,9 +182,12 @@ export function buildTrajectory(preset) {
   const returnStartSec = returnProfile ? burnoutSec + (returnProfile.coastBeforeReturnSec || 2400) : null;
   const entryStartSec = returnProfile ? returnStartSec + (returnProfile.entryLeadSec || 900) : null;
   const returnDurationSec = returnProfile ? returnProfile.descentDurationSec || 3600 : 0;
+  const configuredCoastSec = preset.modelHints?.coastDurationSec || 900;
+  const minimumVisualCoastSec = 2400;
+  const nonReturnCoastSec = Math.max(configuredCoastSec, minimumVisualCoastSec);
   const maxDurationSec = returnProfile
     ? returnStartSec + returnDurationSec + 1800
-    : burnoutSec + (preset.modelHints?.coastDurationSec || 900);
+    : burnoutSec + nonReturnCoastSec;
   const minReturnCheckSec = returnProfile ? returnStartSec + 300 : burnoutSec + 60;
 
   if (returnProfile) {
