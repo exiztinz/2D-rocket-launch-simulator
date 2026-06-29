@@ -1,6 +1,7 @@
 const G0 = 9.80665;
 const EARTH_RADIUS_M = 6371000;
 const EARTH_MU = G0 * EARTH_RADIUS_M * EARTH_RADIUS_M;
+const EARTH_ANGULAR_RATE_RAD_PER_SEC = 7.2921159e-5;
 const DT = 0.05;
 
 function smoothstep(edge0, edge1, x) {
@@ -19,6 +20,104 @@ function lerp(a, b, t) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function earthSurfaceRotationSpeedMps(latitudeDeg) {
+  const latitudeRad = (latitudeDeg * Math.PI) / 180;
+  return EARTH_ANGULAR_RATE_RAD_PER_SEC * EARTH_RADIUS_M * Math.cos(latitudeRad);
+}
+
+function initialHorizontalVelocityMps(preset) {
+  const configured = preset?.modelHints?.initialHorizontalVelocityMps;
+  if (Number.isFinite(configured)) {
+    return configured;
+  }
+
+  const launchLatitudeDeg = Number.isFinite(preset?.location?.lat)
+    ? preset.location.lat
+    : 0;
+  // Default assumes eastward launch, so Earth rotation adds positive tangential speed.
+  return earthSurfaceRotationSpeedMps(launchLatitudeDeg);
+}
+
+function defaultTargetInclinationDeg(preset) {
+  const id = String(preset?.id || '').toLowerCase();
+  if (id.includes('apollo')) return 32.5;
+  if (id.includes('shuttle')) return 40.3;
+  if (id.includes('starlink')) return 53.0;
+  return 28.5;
+}
+
+function defaultLaunchAzimuthDeg(preset) {
+  const id = String(preset?.id || '').toLowerCase();
+  if (id.includes('apollo')) return 72;
+  if (id.includes('shuttle')) return 67;
+  if (id.includes('starlink')) return 43;
+  return 72;
+}
+
+function orbitalPlaneAzimuthDeg(latitudeDeg, inclinationDeg, fallbackAzimuthDeg) {
+  const latRad = (latitudeDeg * Math.PI) / 180;
+  const incRad = (inclinationDeg * Math.PI) / 180;
+  const cosLat = Math.max(0.0001, Math.cos(latRad));
+  const ratio = clamp(Math.cos(incRad) / cosLat, -1, 1);
+  const azimuthRad = Math.asin(ratio);
+  const azimuthDeg = (azimuthRad * 180) / Math.PI;
+  if (!Number.isFinite(azimuthDeg)) {
+    return fallbackAzimuthDeg;
+  }
+  return azimuthDeg;
+}
+
+function greatCirclePositionFromLaunch(lat0Deg, lon0Deg, azimuthDeg, centralAngleRad) {
+  const lat0 = (lat0Deg * Math.PI) / 180;
+  const lon0 = (lon0Deg * Math.PI) / 180;
+  const az = (azimuthDeg * Math.PI) / 180;
+  const sigma = Math.max(0, centralAngleRad);
+
+  const sinLat = (Math.sin(lat0) * Math.cos(sigma))
+    + (Math.cos(lat0) * Math.sin(sigma) * Math.cos(az));
+  const lat = Math.asin(clamp(sinLat, -1, 1));
+
+  const y = -Math.sin(sigma) * Math.sin(az) * Math.cos(lat0);
+  const x = Math.cos(sigma) - (Math.sin(lat0) * Math.sin(lat));
+  const lon = lon0 + Math.atan2(y, x);
+
+  const lonWrapped = ((lon + Math.PI) % (2 * Math.PI) + (2 * Math.PI)) % (2 * Math.PI) - Math.PI;
+  return {
+    latDeg: (lat * 180) / Math.PI,
+    lonDeg: (lonWrapped * 180) / Math.PI
+  };
+}
+
+function geodeticToEcef(latDeg, lonDeg, radiusM) {
+  const lat = (latDeg * Math.PI) / 180;
+  const lon = (lonDeg * Math.PI) / 180;
+  const cosLat = Math.cos(lat);
+  return {
+    x: radiusM * cosLat * Math.cos(lon),
+    y: radiusM * cosLat * Math.sin(lon),
+    z: radiusM * Math.sin(lat)
+  };
+}
+
+function rotateEcefToEci(vector, earthRotationAngleRad) {
+  const cosA = Math.cos(earthRotationAngleRad);
+  const sinA = Math.sin(earthRotationAngleRad);
+  return {
+    x: (vector.x * cosA) - (vector.y * sinA),
+    y: (vector.x * sinA) + (vector.y * cosA),
+    z: vector.z
+  };
+}
+
+function subtractVectors(a, b, dtSec) {
+  const invDt = dtSec > 0 ? 1 / dtSec : 0;
+  return {
+    x: (a.x - b.x) * invDt,
+    y: (a.y - b.y) * invDt,
+    z: (a.z - b.z) * invDt
+  };
 }
 
 function buildTimeline(stages) {
@@ -200,14 +299,32 @@ export function buildTrajectory(preset) {
   }
 
   const samples = [];
+  const launchLatDeg = Number.isFinite(preset?.location?.lat) ? preset.location.lat : 0;
+  const launchLonDeg = Number.isFinite(preset?.location?.lon) ? preset.location.lon : 0;
+  const targetInclinationDeg = Number.isFinite(preset?.modelHints?.targetInclinationDeg)
+    ? preset.modelHints.targetInclinationDeg
+    : defaultTargetInclinationDeg(preset);
+  const launchAzimuthDeg = Number.isFinite(preset?.modelHints?.launchAzimuthDeg)
+    ? preset.modelHints.launchAzimuthDeg
+    : defaultLaunchAzimuthDeg(preset);
+  const azimuthBlendStartSec = 8;
+  const azimuthBlendEndSec = 58;
+
   let altitudeM = 0;
   let thetaRad = 0;
   let velocityVertical = 0;
-  let velocityHorizontal = 0;
+  let velocityHorizontal = initialHorizontalVelocityMps(preset);
   let accelerationMps2 = 0;
   let totalDurationSec = 0;
   let previousX = 0;
   let previousY = EARTH_RADIUS_M;
+  let previousPosEcef = null;
+  let previousPosEci = null;
+  let visualDownrangeRad = 0;
+  let previousVisualDownrangeRad = 0;
+  let currentGeoLatDeg = launchLatDeg;
+  let currentGeoLonDeg = launchLonDeg;
+  let currentTrackAzimuthDeg = launchAzimuthDeg;
 
   for (let tSec = 0; tSec <= maxDurationSec; tSec += DT) {
     const stage = lookupStage(stageTimeline, tSec);
@@ -283,9 +400,44 @@ export function buildTrajectory(preset) {
     const updatedRadiusM = Math.max(EARTH_RADIUS_M, radiusM + velocityVertical * DT);
     altitudeM = updatedRadiusM - EARTH_RADIUS_M;
     thetaRad += (velocityHorizontal / Math.max(EARTH_RADIUS_M, updatedRadiusM)) * DT;
+    const baseVisualHorizontalMps = Math.max(0, velocityHorizontal);
+    const pitchIntent = Math.max(0, Math.sin(pitchRad));
+    const assistedHorizontalMps = Math.max(baseVisualHorizontalMps, speed * pitchIntent * 0.38);
+    const visualTurnAssist = smoothstep(0.8, 18, tSec);
+    const visualHorizontalMps = lerp(baseVisualHorizontalMps, assistedHorizontalMps, visualTurnAssist);
+    visualDownrangeRad += (visualHorizontalMps / Math.max(EARTH_RADIUS_M, updatedRadiusM)) * DT;
 
     const x = Math.sin(thetaRad) * updatedRadiusM;
     const y = Math.cos(thetaRad) * updatedRadiusM;
+    const deltaSigma = Math.max(0, visualDownrangeRad - previousVisualDownrangeRad);
+    const inclinationAzimuthDeg = orbitalPlaneAzimuthDeg(
+      currentGeoLatDeg,
+      targetInclinationDeg,
+      launchAzimuthDeg
+    );
+    const azimuthBlend = smoothstep(azimuthBlendStartSec, azimuthBlendEndSec, tSec);
+    currentTrackAzimuthDeg = lerp(launchAzimuthDeg, inclinationAzimuthDeg, azimuthBlend);
+
+    if (deltaSigma > 0) {
+      const advancedGeo = greatCirclePositionFromLaunch(
+        currentGeoLatDeg,
+        currentGeoLonDeg,
+        currentTrackAzimuthDeg,
+        deltaSigma
+      );
+      currentGeoLatDeg = advancedGeo.latDeg;
+      currentGeoLonDeg = advancedGeo.lonDeg;
+    }
+
+    const geo = {
+      latDeg: currentGeoLatDeg,
+      lonDeg: currentGeoLonDeg
+    };
+    const posEcef = geodeticToEcef(geo.latDeg, geo.lonDeg, updatedRadiusM);
+    const earthRotationAngleRad = EARTH_ANGULAR_RATE_RAD_PER_SEC * tSec;
+    const posEci = rotateEcefToEci(posEcef, earthRotationAngleRad);
+    const velEcef = previousPosEcef ? subtractVectors(posEcef, previousPosEcef, DT) : { x: 0, y: 0, z: 0 };
+    const velEci = previousPosEci ? subtractVectors(posEci, previousPosEci, DT) : { x: 0, y: 0, z: 0 };
 
     // Velocity components in 2D Cartesian scene frame (radial + tangential decomposition).
     const vx = velocityVertical * Math.sin(thetaRad) + velocityHorizontal * Math.cos(thetaRad);
@@ -310,6 +462,15 @@ export function buildTrajectory(preset) {
         headingY: EARTH_RADIUS_M - previousY,
         vx: 0,
         vy: 0,
+        latDeg: geo.latDeg,
+        lonDeg: geo.lonDeg,
+        downrangeRad: visualDownrangeRad,
+        launchAzimuthDeg: currentTrackAzimuthDeg,
+        targetInclinationDeg,
+        posEcef,
+        velEcef: { x: 0, y: 0, z: 0 },
+        posEci,
+        velEci: { x: 0, y: 0, z: 0 },
         thrustRatio: 0,
         stageName: 'Landed',
         engineOn: false,
@@ -332,6 +493,15 @@ export function buildTrajectory(preset) {
       headingY: y - previousY,
       vx,
       vy,
+      latDeg: geo.latDeg,
+      lonDeg: geo.lonDeg,
+      downrangeRad: visualDownrangeRad,
+      launchAzimuthDeg: currentTrackAzimuthDeg,
+      targetInclinationDeg,
+      posEcef,
+      velEcef,
+      posEci,
+      velEci,
       thrustRatio,
       stageName: stage ? stage.name : 'Coast',
       engineOn,
@@ -340,6 +510,9 @@ export function buildTrajectory(preset) {
 
     previousX = x;
     previousY = y;
+    previousPosEcef = posEcef;
+    previousPosEci = posEci;
+    previousVisualDownrangeRad = visualDownrangeRad;
 
     totalDurationSec = tSec;
   }

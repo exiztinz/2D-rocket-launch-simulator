@@ -13,14 +13,15 @@ const DEFAULT_LAUNCH_LAT = 28.6084;
 const DEFAULT_LAUNCH_LON = -80.6043;
 const ROCKET_SURFACE_OFFSET = 0;
 const PAD_LOCK_ALTITUDE_THRESHOLD_M = 2000;
-const ASCENT_ATTITUDE_LOCK_SEC = 18;
-const SURFACE_LOCK_RELEASE_ALTITUDE_M = 5000;
-const SURFACE_LOCK_RELEASE_VELOCITY_MPS = 140;
-const SURFACE_LOCK_RELEASE_TIME_SEC = 24;
+const ASCENT_ATTITUDE_LOCK_SEC = 8;
+const SURFACE_LOCK_RELEASE_ALTITUDE_M = 1500;
+const SURFACE_LOCK_RELEASE_VELOCITY_MPS = 70;
+const SURFACE_LOCK_RELEASE_TIME_SEC = 10;
 const TANGENT_BLEND_DURATION_SEC = 16;
+const TRAJECTORY_ALTITUDE_SCALE_RATIO = 0.24;
 const WORLD_Y_AXIS = new THREE.Vector3(0, 1, 0);
 const EARTH_TEXTURE_LONGITUDE_OFFSET_DEG = -18.4;
-const EARTH_ROTATION_VISUAL_MULTIPLIER = 6;
+const EARTH_SIDEREAL_ROTATION_RAD_PER_SEC = 7.2921159e-5;
 const EARTH_DAYMAP_HIRES_URL = '../../assets/textures/earth/earth_day_8192.png';
 const EARTH_NORMALMAP_URL = '../../assets/textures/earth/earth_normal_2048.jpg';
 const EARTH_NIGHTMAP_URL = '../../assets/textures/earth/earth_lights_2048.png';
@@ -332,10 +333,12 @@ export class LaunchScene {
     this.smoothedPathDirection = new THREE.Vector3(0, 1, 0);
     this.currentAltitudeM = 0;
     this.currentVelocityMps = 0;
+    this.currentGeoLat = DEFAULT_LAUNCH_LAT;
+    this.currentGeoLon = DEFAULT_LAUNCH_LON;
     this.surfaceLockActive = true;
     this.surfaceLockReleased = false;
     this.engineTrailPoints = [];
-    this.earthRotationRate = 0.00008;
+    this.earthRotationRate = EARTH_SIDEREAL_ROTATION_RAD_PER_SEC;
     this.launchLatitude = DEFAULT_LAUNCH_LAT;
     this.launchLongitude = DEFAULT_LAUNCH_LON;
     this.earthSpinOffset = 0;
@@ -385,7 +388,7 @@ export class LaunchScene {
         opacity: 0.98,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
-        depthTest: false,
+        depthTest: true,
         fog: false
       })
     );
@@ -400,7 +403,7 @@ export class LaunchScene {
         opacity: 0.62,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
-        depthTest: false,
+        depthTest: true,
         fog: false
       })
     );
@@ -625,15 +628,27 @@ export class LaunchScene {
 
   getEarthRotationRad() {
     const timeSec = this.hasSimulationClock ? this.simulationTimeSec : this.clock.getElapsedTime();
-    return this.earthSpinOffset
-      + (timeSec * this.earthRotationRate * EARTH_ROTATION_VISUAL_MULTIPLIER * this.motionScale);
+    return this.earthSpinOffset + (timeSec * this.earthRotationRate);
   }
 
   getRocketAnchoredPosition(altitudeM = 0, arcAngleRad = 0, includeEarthRotation = false) {
     const visualRadius = EARTH_VISUAL_RADIUS + ROCKET_SURFACE_OFFSET + Math.max(0, altitudeM) * ALTITUDE_VISUAL_SCALE;
     const local = this.latLonToVector(
       this.launchLatitude,
-      this.launchLongitude + EARTH_TEXTURE_LONGITUDE_OFFSET_DEG + THREE.MathUtils.radToDeg(arcAngleRad),
+      this.launchLongitude + EARTH_TEXTURE_LONGITUDE_OFFSET_DEG - THREE.MathUtils.radToDeg(arcAngleRad),
+      visualRadius
+    );
+    if (includeEarthRotation) {
+      return local.applyAxisAngle(WORLD_Y_AXIS, this.getEarthRotationRad());
+    }
+    return local;
+  }
+
+  getGeoAnchoredPosition(latDeg, lonDeg, altitudeM = 0, includeEarthRotation = false) {
+    const visualRadius = EARTH_VISUAL_RADIUS + ROCKET_SURFACE_OFFSET + Math.max(0, altitudeM) * ALTITUDE_VISUAL_SCALE;
+    const local = this.latLonToVector(
+      latDeg,
+      lonDeg + EARTH_TEXTURE_LONGITUDE_OFFSET_DEG,
       visualRadius
     );
     if (includeEarthRotation) {
@@ -648,6 +663,8 @@ export class LaunchScene {
 
     this.launchLatitude = lat;
     this.launchLongitude = lon;
+    this.currentGeoLat = lat;
+    this.currentGeoLon = lon;
 
     this.resetPath();
   }
@@ -892,6 +909,8 @@ export class LaunchScene {
     this.smoothedPathDirection.copy(padNormal);
     this.currentAltitudeM = 0;
     this.currentVelocityMps = 0;
+    this.currentGeoLat = this.launchLatitude;
+    this.currentGeoLon = this.launchLongitude;
     this.surfaceLockActive = true;
     this.surfaceLockReleased = false;
     this.simulationTimeSec = 0;
@@ -965,8 +984,19 @@ export class LaunchScene {
     }
     this.currentArcAngleRad = arcAngle;
     const earthRotationRad = this.getEarthRotationRad();
-    const localOriented = this.getRocketAnchoredPosition(altitudeM, this.currentArcAngleRad, false);
-    const oriented = localOriented.clone().applyAxisAngle(WORLD_Y_AXIS, earthRotationRad);
+    const hasGeo = Number.isFinite(sample.latDeg) && Number.isFinite(sample.lonDeg);
+    const sampleLat = hasGeo ? sample.latDeg : this.launchLatitude;
+    const sampleLon = hasGeo ? sample.lonDeg : this.launchLongitude;
+    const localOriented = hasGeo
+      ? this.getGeoAnchoredPosition(sampleLat, sampleLon, altitudeM, false)
+      : this.getRocketAnchoredPosition(altitudeM, this.currentArcAngleRad, false);
+    const pathAltitudeM = altitudeM * TRAJECTORY_ALTITUDE_SCALE_RATIO;
+    const localPathPoint = hasGeo
+        ? this.getGeoAnchoredPosition(sampleLat, sampleLon, pathAltitudeM, false)
+        : this.getRocketAnchoredPosition(pathAltitudeM, this.currentArcAngleRad, false);
+    const oriented = localPathPoint.clone().applyAxisAngle(WORLD_Y_AXIS, earthRotationRad);
+    this.currentGeoLat = sampleLat;
+    this.currentGeoLon = sampleLon;
 
     const missionTimeSec = Number.isFinite(sample.tSec) ? sample.tSec : 0;
     const shouldReleaseSurfaceLock = altitudeM > SURFACE_LOCK_RELEASE_ALTITUDE_M
@@ -988,7 +1018,7 @@ export class LaunchScene {
     this.currentAltitudeM = sample.altitudeM;
     this.currentVelocityMps = sample.velocityMps;
 
-    const localMotion = localOriented.clone().sub(this.previousLocalRocketPosition);
+    const localMotion = localPathPoint.clone().sub(this.previousLocalRocketPosition);
 
     const readabilityScale = THREE.MathUtils.lerp(1.04, 0.68, THREE.MathUtils.clamp(sample.altitudeM / 260000, 0, 1));
     this.rocket.scale.setScalar(0.22 * readabilityScale);
@@ -1019,9 +1049,9 @@ export class LaunchScene {
     }
 
     if (appendPath) {
-      this.pathPoints.push(localOriented.clone());
+      this.pathPoints.push(localPathPoint.clone());
     }
-    this.previousLocalRocketPosition.copy(localOriented);
+    this.previousLocalRocketPosition.copy(localPathPoint);
     if (this.pathPoints.length >= 2) {
       this.pathGeometry.setFromPoints(this.pathPoints);
       this.pathGlowGeometry.setFromPoints(this.pathPoints);
@@ -1177,9 +1207,11 @@ export class LaunchScene {
 
     this.earth.rotation.y = this.getEarthRotationRad();
     if (this.surfaceLockActive) {
-      const anchoredPosition = this.getRocketAnchoredPosition(
-        this.currentAltitudeM,
-        this.currentArcAngleRad || 0,
+      const surfaceLockAltitudeM = this.currentAltitudeM * TRAJECTORY_ALTITUDE_SCALE_RATIO;
+      const anchoredPosition = this.getGeoAnchoredPosition(
+        this.currentGeoLat,
+        this.currentGeoLon,
+        surfaceLockAltitudeM,
         true
       );
       const anchoredNormal = anchoredPosition.clone().normalize();

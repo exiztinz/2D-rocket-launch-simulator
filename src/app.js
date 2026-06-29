@@ -76,6 +76,25 @@ function interpolateSample(samples, timeSec) {
   const b = samples[high];
   const span = Math.max(0.0001, b.tSec - a.tSec);
   const t = (timeSec - a.tSec) / span;
+  const interpolateOrSnap = (av, bv) => (
+    Number.isFinite(av) && Number.isFinite(bv)
+      ? av + (bv - av) * t
+      : (t < 0.5 ? av : bv)
+  );
+  const interpolateVector = (av, bv) => {
+    if (!av || !bv) return t < 0.5 ? av : bv;
+    const ax = Number.isFinite(av.x) ? av.x : 0;
+    const ay = Number.isFinite(av.y) ? av.y : 0;
+    const az = Number.isFinite(av.z) ? av.z : 0;
+    const bx = Number.isFinite(bv.x) ? bv.x : 0;
+    const by = Number.isFinite(bv.y) ? bv.y : 0;
+    const bz = Number.isFinite(bv.z) ? bv.z : 0;
+    return {
+      x: ax + (bx - ax) * t,
+      y: ay + (by - ay) * t,
+      z: az + (bz - az) * t
+    };
+  };
 
   return {
     tSec: timeSec,
@@ -90,6 +109,15 @@ function interpolateSample(samples, timeSec) {
     headingY: a.headingY + (b.headingY - a.headingY) * t,
     vx: a.vx + (b.vx - a.vx) * t,
     vy: a.vy + (b.vy - a.vy) * t,
+    latDeg: interpolateOrSnap(a.latDeg, b.latDeg),
+    lonDeg: interpolateOrSnap(a.lonDeg, b.lonDeg),
+    downrangeRad: interpolateOrSnap(a.downrangeRad, b.downrangeRad),
+    launchAzimuthDeg: interpolateOrSnap(a.launchAzimuthDeg, b.launchAzimuthDeg),
+    targetInclinationDeg: interpolateOrSnap(a.targetInclinationDeg, b.targetInclinationDeg),
+    posEcef: interpolateVector(a.posEcef, b.posEcef),
+    velEcef: interpolateVector(a.velEcef, b.velEcef),
+    posEci: interpolateVector(a.posEci, b.posEci),
+    velEci: interpolateVector(a.velEci, b.velEci),
     thrustRatio: a.thrustRatio + (b.thrustRatio - a.thrustRatio) * t,
     stageName: t < 0.5 ? a.stageName : b.stageName,
     engineOn: t < 0.5 ? a.engineOn : b.engineOn,
