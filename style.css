@@ -91,6 +91,19 @@ label {
     color: var(--text-soft);
 }
 
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding-bottom: 0.2rem;
+}
+
+.toggle-label input[type='checkbox'] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: #8fd6ff;
+}
+
 select,
 button {
     height: 2.2rem;

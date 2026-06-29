@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "npx --yes http-server . -p 4173 -c-1",
     "regression:check": "node scripts/regression-check.mjs",
     "baseline:capture": "node scripts/capture-baseline.mjs",
     "calibration:report": "node scripts/calibration-report.mjs",

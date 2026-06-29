@@ -12,14 +12,17 @@ This refactor replaces the original 2D manual-input simulator with a preset-base
 	- Right/sidebar: compact telemetry + mini charts.
 - Mission setup changed from free numeric controls to historical presets.
 - Telemetry now includes mission events and stage timeline markers.
+- Launch position now maps to each preset's historical site coordinates on Earth.
 
 ## Features
 
 - Three.js 3D scene with:
-	- Earth sphere and atmospheric glow.
+	- Earth replica shading with land/ocean/ice, cloud shell, and atmospheric glow.
 	- Launch pad region and rocket model.
 	- Engine plume and evolving trajectory path.
+	- Layered starfields, subtle nebula haze, aurora shimmer, and occasional shooting stars.
 	- Camera modes: Follow Rocket, Ground Observer, Wide Orbit.
+	- Visual controls: quality tier (Low/Medium/High) and Reduced Motion toggle.
 - Historical preset selector with at least 3 missions:
 	- Saturn V - Apollo 11 class profile.
 	- Space Shuttle - STS-1 class profile.

@@ -9,32 +9,252 @@ const FOLLOW_OFFSET_LOW = new THREE.Vector3(2.2, 4.2, 14);
 const FOLLOW_OFFSET_HIGH = new THREE.Vector3(8, 12, 30);
 const GROUND_OFFSET = new THREE.Vector3(0, 18, 56);
 const ORBIT_OFFSET = new THREE.Vector3(44, 58, 86);
+const DEFAULT_LAUNCH_LAT = 28.6084;
+const DEFAULT_LAUNCH_LON = -80.6043;
+const ROCKET_SURFACE_OFFSET = 0;
+const PAD_LOCK_ALTITUDE_THRESHOLD_M = 2000;
+const ASCENT_ATTITUDE_LOCK_SEC = 18;
+const SURFACE_LOCK_RELEASE_ALTITUDE_M = 5000;
+const SURFACE_LOCK_RELEASE_VELOCITY_MPS = 140;
+const SURFACE_LOCK_RELEASE_TIME_SEC = 24;
+const TANGENT_BLEND_DURATION_SEC = 16;
+const WORLD_Y_AXIS = new THREE.Vector3(0, 1, 0);
+const EARTH_TEXTURE_LONGITUDE_OFFSET_DEG = -18.4;
+const EARTH_ROTATION_VISUAL_MULTIPLIER = 6;
+const EARTH_DAYMAP_HIRES_URL = '../../assets/textures/earth/earth_day_8192.png';
+const EARTH_NORMALMAP_URL = '../../assets/textures/earth/earth_normal_2048.jpg';
+const EARTH_NIGHTMAP_URL = '../../assets/textures/earth/earth_lights_2048.png';
+const EARTH_CLOUDMAP_URL = '../../assets/textures/earth/earth_clouds_1024.png';
 
-function buildStarField() {
+const QUALITY_LEVELS = {
+  low: {
+    nearStars: 500,
+    midStars: 380,
+    farStars: 280,
+    twinkle: 0.45,
+    shootingStars: 1,
+    nebulaOpacity: 0.045,
+    plumeExposure: 0.8
+  },
+  medium: {
+    nearStars: 900,
+    midStars: 700,
+    farStars: 500,
+    twinkle: 0.7,
+    shootingStars: 2,
+    nebulaOpacity: 0.075,
+    plumeExposure: 1
+  },
+  high: {
+    nearStars: 1350,
+    midStars: 1050,
+    farStars: 760,
+    twinkle: 1,
+    shootingStars: 3,
+    nebulaOpacity: 0.11,
+    plumeExposure: 1.16
+  }
+};
+
+function loadEarthTexture(loader, fileNameOrUrl, isColor = false) {
+  const isRemote = /^https?:\/\//i.test(fileNameOrUrl);
+  const isLocalPath = /^(?:\.{1,2}\/|\/)/.test(fileNameOrUrl);
+  const url = isRemote || isLocalPath
+    ? new URL(fileNameOrUrl, import.meta.url).href
+    : fileNameOrUrl;
+  const texture = loader.load(url);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  if (isColor) {
+    texture.colorSpace = THREE.SRGBColorSpace;
+  }
+  return texture;
+}
+
+function makeEarth(maxAnisotropy = 1) {
+  const earth = new THREE.Group();
+  const textureLoader = new THREE.TextureLoader();
+  const dayMap = loadEarthTexture(textureLoader, EARTH_DAYMAP_HIRES_URL, true);
+  const normalMap = loadEarthTexture(textureLoader, EARTH_NORMALMAP_URL);
+  const nightMap = loadEarthTexture(textureLoader, EARTH_NIGHTMAP_URL, true);
+  const cloudMap = loadEarthTexture(textureLoader, EARTH_CLOUDMAP_URL, true);
+  const textures = [dayMap, normalMap, nightMap, cloudMap];
+  textures.forEach((texture) => {
+    texture.anisotropy = Math.max(1, Math.floor(maxAnisotropy));
+  });
+
+  const surface = new THREE.Mesh(
+    new THREE.SphereGeometry(EARTH_VISUAL_RADIUS, 128, 128),
+    new THREE.MeshStandardMaterial({
+      map: dayMap,
+      normalMap,
+      normalScale: new THREE.Vector2(0.42, 0.42),
+      roughness: 0.84,
+      metalness: 0,
+      emissive: 0xffffff,
+      emissiveMap: nightMap,
+      emissiveIntensity: 0.2
+    })
+  );
+  earth.add(surface);
+
+  const cloudBand = new THREE.Mesh(
+    new THREE.SphereGeometry(EARTH_VISUAL_RADIUS + 1.1, 72, 72),
+    new THREE.MeshStandardMaterial({
+      map: cloudMap,
+      alphaMap: cloudMap,
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.18,
+      roughness: 1,
+      metalness: 0,
+      depthWrite: false,
+      blending: THREE.NormalBlending
+    })
+  );
+  earth.add(cloudBand);
+
+  earth.userData.surface = surface;
+  earth.userData.cloudBand = cloudBand;
+  return earth;
+}
+
+function buildStarLayer(starCount, minRadius, maxRadius, size, opacity) {
   const starsGeometry = new THREE.BufferGeometry();
-  const starCount = 1400;
   const positions = new Float32Array(starCount * 3);
-
+  const colors = new Float32Array(starCount * 3);
   for (let i = 0; i < starCount; i += 1) {
-    const radius = 280 + Math.random() * 900;
+    const radius = minRadius + Math.random() * (maxRadius - minRadius);
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
+
     positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
     positions[i * 3 + 1] = radius * Math.cos(phi);
     positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+
+    const tint = 0.78 + Math.random() * 0.22;
+    const blueBias = Math.random() > 0.75 ? 0.92 : 1;
+    colors[i * 3] = tint;
+    colors[i * 3 + 1] = tint * (0.94 + Math.random() * 0.08);
+    colors[i * 3 + 2] = tint * blueBias;
   }
 
   starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  starsGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   const starsMaterial = new THREE.PointsMaterial({
-    color: 0xdce8ff,
-    size: 1.8,
+    size,
+    vertexColors: true,
     sizeAttenuation: true,
     transparent: true,
-    opacity: 0.8,
-    depthWrite: false
+    opacity,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
   });
 
   return new THREE.Points(starsGeometry, starsMaterial);
+}
+
+function buildNebulaBands() {
+  const group = new THREE.Group();
+  const palette = [0x3360a2, 0x5a89b8, 0x40637f];
+  for (let i = 0; i < 3; i += 1) {
+    const torus = new THREE.Mesh(
+      new THREE.TorusGeometry(350 + i * 55, 62 + i * 9, 24, 170),
+      new THREE.MeshBasicMaterial({
+        color: palette[i],
+        transparent: true,
+        opacity: 0.06,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide
+      })
+    );
+    torus.rotation.set((Math.PI * 0.22) + i * 0.16, i * 0.43, i * 0.19);
+    group.add(torus);
+  }
+  return group;
+}
+
+function buildShootingStar() {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+  const trail = new THREE.Line(
+    geometry,
+    new THREE.LineBasicMaterial({
+      color: 0xffe2b8,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    })
+  );
+  trail.visible = false;
+  trail.userData = {
+    active: false,
+    age: 0,
+    duration: 0,
+    start: new THREE.Vector3(),
+    velocity: new THREE.Vector3(),
+    length: 0
+  };
+  return trail;
+}
+
+function createSunGradientTexture(size = 256) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  const gradient = ctx.createRadialGradient(
+    size * 0.5,
+    size * 0.5,
+    size * 0.06,
+    size * 0.5,
+    size * 0.5,
+    size * 0.5
+  );
+  gradient.addColorStop(0, 'rgba(255, 252, 236, 1)');
+  gradient.addColorStop(0.25, 'rgba(255, 232, 166, 0.98)');
+  gradient.addColorStop(0.58, 'rgba(255, 184, 104, 0.62)');
+  gradient.addColorStop(1, 'rgba(255, 184, 104, 0)');
+
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function createSunRaysTexture(size = 512, spokes = 16) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const cx = size * 0.5;
+  const cy = size * 0.5;
+
+  const baseGlow = ctx.createRadialGradient(cx, cy, size * 0.1, cx, cy, size * 0.5);
+  baseGlow.addColorStop(0, 'rgba(255, 236, 170, 0.45)');
+  baseGlow.addColorStop(0.45, 'rgba(255, 196, 120, 0.16)');
+  baseGlow.addColorStop(1, 'rgba(255, 196, 120, 0)');
+  ctx.fillStyle = baseGlow;
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.translate(cx, cy);
+  for (let i = 0; i < spokes; i += 1) {
+    ctx.rotate((Math.PI * 2) / spokes);
+    const ray = ctx.createLinearGradient(0, 0, size * 0.46, 0);
+    ray.addColorStop(0, 'rgba(255, 233, 166, 0.45)');
+    ray.addColorStop(1, 'rgba(255, 233, 166, 0)');
+    ctx.fillStyle = ray;
+    ctx.fillRect(0, -2, size * 0.46, 4);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 function buildExhaustTrail() {
@@ -73,7 +293,6 @@ function makeRocket() {
   nose.position.y = 6.35;
   rocket.add(nose);
 
-  const fins = [];
   for (let i = 0; i < 4; i += 1) {
     const fin = new THREE.Mesh(
       new THREE.BoxGeometry(0.03, 0.42, 0.2),
@@ -83,51 +302,9 @@ function makeRocket() {
     fin.position.set(Math.cos(angle) * 0.24, 0.22, Math.sin(angle) * 0.24);
     fin.lookAt(fin.position.clone().multiplyScalar(2));
     rocket.add(fin);
-    fins.push(fin);
   }
 
   return { rocket };
-}
-
-function makeEarth() {
-  const earth = new THREE.Group();
-
-  const surface = new THREE.Mesh(
-    new THREE.SphereGeometry(53, 96, 96),
-    new THREE.MeshStandardMaterial({
-      color: 0x1e4f88,
-      roughness: 0.92,
-      metalness: 0.03
-    })
-  );
-  earth.add(surface);
-
-  const atmosphere = new THREE.Mesh(
-    new THREE.SphereGeometry(55, 72, 72),
-    new THREE.MeshBasicMaterial({
-      color: 0x66b9ff,
-      transparent: true,
-      opacity: 0.14,
-      blending: THREE.AdditiveBlending,
-      side: THREE.BackSide
-    })
-  );
-  earth.add(atmosphere);
-
-  const cloudBand = new THREE.Mesh(
-    new THREE.SphereGeometry(54.5, 48, 48),
-    new THREE.MeshBasicMaterial({
-      color: 0xdff3ff,
-      transparent: true,
-      opacity: 0.07,
-      blending: THREE.AdditiveBlending
-    })
-  );
-  earth.add(cloudBand);
-
-  earth.userData.cloudBand = cloudBand;
-
-  return earth;
 }
 
 export class LaunchScene {
@@ -135,10 +312,12 @@ export class LaunchScene {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x040d1d);
-    this.scene.fog = new THREE.Fog(0x040d1d, 60, 420);
+    this.scene.background = new THREE.Color(0x030913);
+    this.scene.fog = new THREE.Fog(0x030913, 80, 520);
 
     this.camera = new THREE.PerspectiveCamera(52, 1, 0.1, 2600);
     this.camera.position.set(6, 64.5, 78);
@@ -146,12 +325,28 @@ export class LaunchScene {
     this.clock = new THREE.Clock();
     this.lastRenderMs = performance.now();
     this.cameraMode = 'follow';
-    this.currentTarget = new THREE.Vector3(0, 56.5, 0);
-    this.previousRocketPosition = new THREE.Vector3(0, 56.5, 0);
+    this.currentTarget = new THREE.Vector3(0, EARTH_VISUAL_RADIUS + 3.5, 0);
+    this.previousRocketPosition = new THREE.Vector3(0, EARTH_VISUAL_RADIUS + 3.5, 0);
+    this.previousLocalRocketPosition = new THREE.Vector3(0, EARTH_VISUAL_RADIUS + 3.5, 0);
     this.previousDirection = new THREE.Vector3(0, 1, 0);
     this.smoothedPathDirection = new THREE.Vector3(0, 1, 0);
     this.currentAltitudeM = 0;
+    this.currentVelocityMps = 0;
+    this.surfaceLockActive = true;
+    this.surfaceLockReleased = false;
     this.engineTrailPoints = [];
+    this.earthRotationRate = 0.00008;
+    this.launchLatitude = DEFAULT_LAUNCH_LAT;
+    this.launchLongitude = DEFAULT_LAUNCH_LON;
+    this.earthSpinOffset = 0;
+    this.quality = 'medium';
+    this.reducedMotion = Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    this.motionScale = this.reducedMotion ? 0.45 : 1;
+    this.starLayers = [];
+    this.shootingStars = [];
+    this.lastSunUpdateMs = 0;
+    this.simulationTimeSec = 0;
+    this.hasSimulationClock = false;
     this.freeOrbit = {
       dragging: false,
       lastX: 0,
@@ -167,27 +362,66 @@ export class LaunchScene {
       baseMoveSpeed: 22
     };
 
-    const ambient = new THREE.AmbientLight(0x6d8ebd, 0.72);
-    const key = new THREE.DirectionalLight(0xf5fcff, 1.08);
-    key.position.set(80, 120, 120);
-    const rim = new THREE.DirectionalLight(0x5a9dff, 0.5);
-    rim.position.set(-90, 80, -70);
-    this.scene.add(ambient, key, rim);
+    const ambient = new THREE.AmbientLight(0x6f8fb6, 0.58);
+    const key = new THREE.DirectionalLight(0xfff4de, 1.95);
+    key.position.set(120, 90, 120);
+    const rim = new THREE.DirectionalLight(0x63a6ff, 0.42);
+    rim.position.set(-110, 52, -82);
+    const hemi = new THREE.HemisphereLight(0xa8cfff, 0x0b1224, 0.34);
+    this.scene.add(ambient, key, rim, hemi);
+    this.ambientLight = ambient;
+    this.keyLight = key;
+    this.rimLight = rim;
+    this.hemiLight = hemi;
 
-    this.earth = makeEarth();
+    this.sunGroup = new THREE.Group();
+    this.scene.add(this.sunGroup);
+
+    const sunCoreTexture = createSunGradientTexture(256);
+    this.sunCore = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: sunCoreTexture,
+        transparent: true,
+        opacity: 0.98,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: false,
+        fog: false
+      })
+    );
+    this.sunCore.scale.set(34, 34, 1);
+    this.sunGroup.add(this.sunCore);
+
+    const sunRaysTexture = createSunRaysTexture(512, 16);
+    this.sunRays = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: sunRaysTexture,
+        transparent: true,
+        opacity: 0.62,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: false,
+        fog: false
+      })
+    );
+    this.sunRays.scale.set(130, 130, 1);
+    this.sunGroup.add(this.sunRays);
+
+    this.earth = makeEarth(this.renderer.capabilities.getMaxAnisotropy());
     this.scene.add(this.earth);
 
-    this.stars = buildStarField();
-    this.scene.add(this.stars);
+    this.backgroundGroup = new THREE.Group();
+    this.scene.add(this.backgroundGroup);
+
+    this.nebulaBands = buildNebulaBands();
+    this.backgroundGroup.add(this.nebulaBands);
 
     const { rocket } = makeRocket();
     this.rocket = rocket;
-    this.rocket.position.set(0, 56.5, 0);
     this.rocket.scale.setScalar(0.22);
     this.scene.add(this.rocket);
 
     this.nozzleMount = new THREE.Group();
-    // Placed at the bottom of stage1 (stage1 spans y=0 to y=3.2 in rocket-local space).
     this.nozzleMount.position.set(0, 0, 0);
     this.rocket.add(this.nozzleMount);
 
@@ -270,8 +504,9 @@ export class LaunchScene {
     this.plumeHalo.visible = false;
     this.nozzleMount.add(this.plumeHalo);
 
-    this.plumeBillboard = new THREE.Sprite(
-      new THREE.SpriteMaterial({
+    this.plumeBillboard = new THREE.Mesh(
+      new THREE.SphereGeometry(0.12, 16, 12),
+      new THREE.MeshBasicMaterial({
         color: 0xffc26f,
         transparent: true,
         opacity: 0.78,
@@ -281,7 +516,7 @@ export class LaunchScene {
       })
     );
     this.plumeBillboard.position.set(0, -0.28, 0);
-    this.plumeBillboard.scale.set(0.24, 0.24, 0.24);
+    this.plumeBillboard.scale.setScalar(0.24);
     this.plumeBillboard.visible = false;
     this.plumeBillboard.renderOrder = 15;
     this.nozzleMount.add(this.plumeBillboard);
@@ -298,7 +533,7 @@ export class LaunchScene {
     this.pathLine = new THREE.Line(this.pathGeometry, this.pathMaterial);
     this.pathLine.frustumCulled = false;
     this.pathLine.renderOrder = 4;
-    this.scene.add(this.pathLine);
+    this.earth.add(this.pathLine);
 
     this.pathGlowGeometry = new THREE.BufferGeometry();
     this.pathGlowMaterial = new THREE.PointsMaterial({
@@ -313,18 +548,153 @@ export class LaunchScene {
     this.pathGlow = new THREE.Points(this.pathGlowGeometry, this.pathGlowMaterial);
     this.pathGlow.frustumCulled = false;
     this.pathGlow.renderOrder = 3;
-    this.scene.add(this.pathGlow);
+    this.earth.add(this.pathGlow);
 
     this.exhaustTrail = buildExhaustTrail();
     this.scene.add(this.exhaustTrail);
 
     this.nozzleLocal = new THREE.Vector3(0, -0.06, 0);
 
+    this.rebuildSpaceEffects();
+    this.setLaunchSite({ lat: DEFAULT_LAUNCH_LAT, lon: DEFAULT_LAUNCH_LON });
+
     this.initFreeOrbitControls();
     this.snapCamera();
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
+  }
+
+  latLonToVector(latDeg, lonDeg, radius) {
+    const lat = THREE.MathUtils.degToRad(latDeg);
+    // Three.js sphere texture orientation is east-west flipped relative to our
+    // initial mapping; invert longitude so historical sites align geographically.
+    const lon = THREE.MathUtils.degToRad(-lonDeg);
+    const cosLat = Math.cos(lat);
+    const x = -radius * cosLat * Math.cos(lon);
+    const y = radius * Math.sin(lat);
+    const z = radius * cosLat * Math.sin(lon);
+    return new THREE.Vector3(x, y, z);
+  }
+
+  dayOfYearUTC(date) {
+    const start = Date.UTC(date.getUTCFullYear(), 0, 0);
+    const now = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+    return Math.floor((now - start) / 86400000);
+  }
+
+  computeSunDirectionUTC(date) {
+    const utcHours = date.getUTCHours() + (date.getUTCMinutes() / 60) + (date.getUTCSeconds() / 3600);
+    const dayOfYear = this.dayOfYearUTC(date);
+
+    // Approximate solar declination and subsolar longitude from UTC.
+    const decl = THREE.MathUtils.degToRad(23.44) * Math.sin((2 * Math.PI * (dayOfYear - 81)) / 365);
+    const subsolarLatDeg = THREE.MathUtils.radToDeg(decl);
+    const subsolarLonDeg = ((180 - (utcHours * 15) + 540) % 360) - 180;
+
+    const direction = this.latLonToVector(subsolarLatDeg, subsolarLonDeg, 1).normalize();
+
+    return {
+      direction
+    };
+  }
+
+  updateSunLighting(nowDate) {
+    const { direction } = this.computeSunDirectionUTC(nowDate);
+
+    this.keyLight.position.copy(direction.clone().multiplyScalar(230));
+    this.rimLight.position.copy(direction.clone().multiplyScalar(-180).add(new THREE.Vector3(0, 35, 0)));
+    this.ambientLight.intensity = 0.34;
+    this.keyLight.intensity = 2.15;
+    this.rimLight.intensity = 0.28;
+    this.hemiLight.intensity = 0.28;
+
+    this.sunGroup.position.copy(direction.clone().multiplyScalar(360));
+
+    const surface = this.earth.userData?.surface;
+    if (surface?.material) {
+      surface.material.emissiveIntensity = 0.14;
+    }
+  }
+
+  computeEarthSpinOffset(latDeg, lonDeg) {
+    void latDeg;
+    void lonDeg;
+    return 0;
+  }
+
+  getEarthRotationRad() {
+    const timeSec = this.hasSimulationClock ? this.simulationTimeSec : this.clock.getElapsedTime();
+    return this.earthSpinOffset
+      + (timeSec * this.earthRotationRate * EARTH_ROTATION_VISUAL_MULTIPLIER * this.motionScale);
+  }
+
+  getRocketAnchoredPosition(altitudeM = 0, arcAngleRad = 0, includeEarthRotation = false) {
+    const visualRadius = EARTH_VISUAL_RADIUS + ROCKET_SURFACE_OFFSET + Math.max(0, altitudeM) * ALTITUDE_VISUAL_SCALE;
+    const local = this.latLonToVector(
+      this.launchLatitude,
+      this.launchLongitude + EARTH_TEXTURE_LONGITUDE_OFFSET_DEG + THREE.MathUtils.radToDeg(arcAngleRad),
+      visualRadius
+    );
+    if (includeEarthRotation) {
+      return local.applyAxisAngle(WORLD_Y_AXIS, this.getEarthRotationRad());
+    }
+    return local;
+  }
+
+  setLaunchSite(location = {}) {
+    const lat = Number.isFinite(location.lat) ? location.lat : DEFAULT_LAUNCH_LAT;
+    const lon = Number.isFinite(location.lon) ? location.lon : DEFAULT_LAUNCH_LON;
+
+    this.launchLatitude = lat;
+    this.launchLongitude = lon;
+
+    this.resetPath();
+  }
+
+  setQuality(level = 'medium') {
+    if (!QUALITY_LEVELS[level]) return;
+    if (this.quality === level) return;
+    this.quality = level;
+    this.rebuildSpaceEffects();
+  }
+
+  setReducedMotion(enabled) {
+    this.reducedMotion = Boolean(enabled);
+    this.motionScale = this.reducedMotion ? 0.45 : 1;
+    this.shootingStars.forEach((star) => {
+      star.visible = false;
+      star.material.opacity = 0;
+      star.userData.active = false;
+    });
+  }
+
+  rebuildSpaceEffects() {
+    const config = QUALITY_LEVELS[this.quality] || QUALITY_LEVELS.medium;
+
+    this.starLayers.forEach((layer) => this.backgroundGroup.remove(layer));
+    this.starLayers = [];
+
+    const nearLayer = buildStarLayer(config.nearStars, 220, 440, 1.7, 0.8);
+    const midLayer = buildStarLayer(config.midStars, 460, 760, 1.35, 0.66);
+    const farLayer = buildStarLayer(config.farStars, 780, 1200, 1.1, 0.48);
+    this.starLayers.push(nearLayer, midLayer, farLayer);
+    this.starLayers.forEach((layer) => this.backgroundGroup.add(layer));
+
+    this.nebulaBands.children.forEach((band) => {
+      band.material.opacity = config.nebulaOpacity;
+    });
+
+    this.shootingStars.forEach((star) => this.scene.remove(star));
+    this.shootingStars = [];
+    for (let i = 0; i < config.shootingStars; i += 1) {
+      const shootingStar = buildShootingStar();
+      this.shootingStars.push(shootingStar);
+      this.scene.add(shootingStar);
+    }
+
+    this.renderer.toneMappingExposure = 1.0 * config.plumeExposure;
+    this.starTwinkleIntensity = config.twinkle;
   }
 
   resize() {
@@ -507,13 +877,25 @@ export class LaunchScene {
     this.pathPoints = [];
     this.pathGeometry.setFromPoints(this.pathPoints);
     this.pathGlowGeometry.setFromPoints(this.pathPoints);
-    this.rocket.position.set(0, 56.5, 0);
+
+    this.currentArcAngleRad = 0;
+    const padPosition = this.getRocketAnchoredPosition(0, this.currentArcAngleRad, true);
+    const padLocalPosition = this.getRocketAnchoredPosition(0, this.currentArcAngleRad, false);
+    const padNormal = padPosition.clone().normalize();
+    this.rocket.position.copy(padPosition);
+    this.currentTarget.copy(padPosition);
     this.rocket.scale.setScalar(0.22);
-    this.rocket.quaternion.identity();
+    this.rocket.quaternion.setFromUnitVectors(ROCKET_NOSE_AXIS, padNormal);
     this.previousRocketPosition.copy(this.rocket.position);
-    this.previousDirection.set(0, 1, 0);
-    this.smoothedPathDirection.set(0, 1, 0);
+    this.previousLocalRocketPosition.copy(padLocalPosition);
+    this.previousDirection.copy(padNormal);
+    this.smoothedPathDirection.copy(padNormal);
     this.currentAltitudeM = 0;
+    this.currentVelocityMps = 0;
+    this.surfaceLockActive = true;
+    this.surfaceLockReleased = false;
+    this.simulationTimeSec = 0;
+    this.hasSimulationClock = false;
     this.engineTrailPoints = [];
     this.exhaustTrail.geometry.setFromPoints(this.engineTrailPoints);
     this.engineLight.intensity = 0;
@@ -522,7 +904,54 @@ export class LaunchScene {
     this.plumeCorona.visible = false;
     this.plumeHalo.visible = false;
     this.plumeBillboard.visible = false;
+
     this.snapCamera();
+  }
+
+  updateShootingStars(deltaSec) {
+    if (this.reducedMotion || this.motionScale < 0.5) return;
+
+    this.shootingStars.forEach((star) => {
+      const state = star.userData;
+      if (!state.active) {
+        if (Math.random() < deltaSec * 0.015 * this.motionScale) {
+          const startRadius = 280 + Math.random() * 260;
+          const theta = Math.random() * Math.PI * 2;
+          const phi = Math.acos(2 * Math.random() - 1);
+          state.start.set(
+            startRadius * Math.sin(phi) * Math.cos(theta),
+            startRadius * Math.cos(phi),
+            startRadius * Math.sin(phi) * Math.sin(theta)
+          );
+
+          state.velocity
+            .copy(state.start)
+            .normalize()
+            .multiplyScalar(-58 - Math.random() * 48)
+            .add(new THREE.Vector3((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 12));
+
+          state.age = 0;
+          state.duration = 0.9 + Math.random() * 0.8;
+          state.length = 8 + Math.random() * 7;
+          state.active = true;
+          star.visible = true;
+        }
+        return;
+      }
+
+      state.age += deltaSec;
+      const life = THREE.MathUtils.clamp(state.age / state.duration, 0, 1);
+      const head = state.start.clone().addScaledVector(state.velocity, state.age);
+      const tail = head.clone().addScaledVector(state.velocity.clone().normalize(), -state.length);
+      star.geometry.setFromPoints([tail, head]);
+      star.material.opacity = (1 - life) * 0.72;
+
+      if (life >= 1) {
+        state.active = false;
+        star.visible = false;
+        star.material.opacity = 0;
+      }
+    });
   }
 
   updateFromSample(sample, options = {}) {
@@ -530,38 +959,58 @@ export class LaunchScene {
     const radialDistanceM = Math.hypot(sample.x, sample.y);
     const altitudeM = Math.max(0, radialDistanceM - EARTH_RADIUS_M);
     const arcAngle = Math.atan2(sample.x, sample.y);
-    const visualRadius = EARTH_VISUAL_RADIUS + altitudeM * ALTITUDE_VISUAL_SCALE;
-    const sx = Math.sin(arcAngle) * visualRadius;
-    const sy = Math.cos(arcAngle) * visualRadius;
+    if (Number.isFinite(sample.tSec)) {
+      this.simulationTimeSec = sample.tSec;
+      this.hasSimulationClock = true;
+    }
+    this.currentArcAngleRad = arcAngle;
+    const earthRotationRad = this.getEarthRotationRad();
+    const localOriented = this.getRocketAnchoredPosition(altitudeM, this.currentArcAngleRad, false);
+    const oriented = localOriented.clone().applyAxisAngle(WORLD_Y_AXIS, earthRotationRad);
+
+    const missionTimeSec = Number.isFinite(sample.tSec) ? sample.tSec : 0;
+    const shouldReleaseSurfaceLock = altitudeM > SURFACE_LOCK_RELEASE_ALTITUDE_M
+      || sample.velocityMps > SURFACE_LOCK_RELEASE_VELOCITY_MPS
+      || missionTimeSec > SURFACE_LOCK_RELEASE_TIME_SEC
+      || Boolean(sample.landed);
+    if (shouldReleaseSurfaceLock) {
+      this.surfaceLockReleased = true;
+    }
+    const surfaceLock = !this.surfaceLockReleased && !sample.landed;
+    this.surfaceLockActive = surfaceLock;
+    const inLaunchAttitudeLock = surfaceLock
+      || (missionTimeSec < ASCENT_ATTITUDE_LOCK_SEC && sample.altitudeM < 20000);
 
     this.previousRocketPosition.copy(this.rocket.position);
 
-    this.rocket.position.set(sx, sy, 0);
-    this.currentTarget.set(sx, sy, 0);
+    this.rocket.position.copy(oriented);
+    this.currentTarget.copy(oriented);
     this.currentAltitudeM = sample.altitudeM;
+    this.currentVelocityMps = sample.velocityMps;
 
-    const visualMotion = this.rocket.position.clone().sub(this.previousRocketPosition);
+    const localMotion = localOriented.clone().sub(this.previousLocalRocketPosition);
 
     const readabilityScale = THREE.MathUtils.lerp(1.04, 0.68, THREE.MathUtils.clamp(sample.altitudeM / 260000, 0, 1));
     this.rocket.scale.setScalar(0.22 * readabilityScale);
 
     const radialOutward = this.currentTarget.clone().normalize();
-    const onPad = this.pathPoints.length < 2 && sample.altitudeM < 2000 && sample.velocityMps < 40 && !sample.landed;
-
-    // Drive attitude from the visual motion vector so body/nose alignment matches
-    // the rendered trajectory line exactly in the compressed scene projection.
-    if (onPad) {
+    if (inLaunchAttitudeLock) {
       const attitude = new THREE.Quaternion().setFromUnitVectors(ROCKET_NOSE_AXIS, radialOutward);
       this.rocket.quaternion.copy(attitude);
       this.previousDirection.copy(radialOutward);
-    } else if (visualMotion.lengthSq() > 0.0000001) {
-      const noseDirection = visualMotion.normalize();
+    } else if (localMotion.lengthSq() > 0.0000001) {
+      const tangentWorld = localMotion.normalize().applyAxisAngle(WORLD_Y_AXIS, earthRotationRad);
+      const blendStartSec = ASCENT_ATTITUDE_LOCK_SEC;
+      const blendFactor = THREE.MathUtils.clamp(
+        (missionTimeSec - blendStartSec) / TANGENT_BLEND_DURATION_SEC,
+        0,
+        1
+      );
+      const noseDirection = radialOutward.clone().lerp(tangentWorld, blendFactor).normalize();
       const attitude = new THREE.Quaternion().setFromUnitVectors(ROCKET_NOSE_AXIS, noseDirection);
       this.rocket.quaternion.copy(attitude);
       this.previousDirection.copy(noseDirection);
     } else {
-      // When motion is tiny (interpolation edge / duplicate frame), keep the
-      // last visual direction to avoid frame-to-frame orientation source flips.
       const fallbackDirection = this.previousDirection.lengthSq() > 0.0000001
         ? this.previousDirection
         : radialOutward;
@@ -569,12 +1018,10 @@ export class LaunchScene {
       this.rocket.quaternion.copy(attitude);
     }
 
-    // Visual stage separation block removed: the generic rocket mesh is not designed
-    // for per-stage body removal, and hiding parts produced a broken half-invisible rocket.
-
     if (appendPath) {
-      this.pathPoints.push(new THREE.Vector3(sx, sy, 0));
+      this.pathPoints.push(localOriented.clone());
     }
+    this.previousLocalRocketPosition.copy(localOriented);
     if (this.pathPoints.length >= 2) {
       this.pathGeometry.setFromPoints(this.pathPoints);
       this.pathGlowGeometry.setFromPoints(this.pathPoints);
@@ -591,10 +1038,9 @@ export class LaunchScene {
 
     const thrustVisible = Boolean(sample.engineOn) && sample.altitudeM < 700000;
     if (thrustVisible) {
-      // Scale plume and engine light by actual thrust ratio so visual intensity matches
-      // simulated thrust level (e.g. max-Q throttle-down, end-of-burn tailoff).
       const thrustRatio = Number.isFinite(sample.thrustRatio) ? Math.max(0.05, sample.thrustRatio) : 1;
-      const flicker = 0.75 + Math.sin(performance.now() * 0.022) * 0.17;
+      const flickerScale = this.reducedMotion ? 0.45 : 1;
+      const flicker = 0.75 + Math.sin(performance.now() * 0.022 * flickerScale) * 0.17 * flickerScale;
       this.engineLight.intensity = (1.7 + flicker * 1.3) * thrustRatio;
       this.plume.visible = true;
       this.plumeCore.visible = true;
@@ -613,7 +1059,7 @@ export class LaunchScene {
 
       for (let i = 0; i < this.plumeCorona.children.length; i += 1) {
         const tongue = this.plumeCorona.children[i];
-        const pulse = 0.82 + Math.sin(performance.now() * 0.016 + i * 0.7) * 0.22;
+        const pulse = 0.82 + Math.sin(performance.now() * 0.016 + i * 0.7) * 0.22 * (this.reducedMotion ? 0.4 : 1);
         tongue.scale.set(0.85 + pulse * 0.25, 0.72 + pulse * 0.4, 0.85 + pulse * 0.25);
       }
 
@@ -702,18 +1148,70 @@ export class LaunchScene {
     const deltaSec = Math.min(0.05, Math.max(0, (nowMs - this.lastRenderMs) / 1000));
     this.lastRenderMs = nowMs;
     const t = this.clock.getElapsedTime();
+
+    if ((nowMs - this.lastSunUpdateMs) > 1000) {
+      this.updateSunLighting(new Date());
+      this.lastSunUpdateMs = nowMs;
+    }
     if (this.cameraMode === 'free') {
       this.updateFreeOrbitCamera(false, deltaSec);
     }
-    this.stars.rotation.y += 0.00006;
-    this.stars.rotation.x = Math.sin(t * 0.04) * 0.03;
+
+    const twinkle = this.starTwinkleIntensity * this.motionScale;
+    if (this.starLayers[0]) {
+      this.starLayers[0].rotation.y += 0.00018 * this.motionScale;
+      this.starLayers[0].material.opacity = 0.72 + Math.sin(t * 0.62) * 0.06 * twinkle;
+    }
+    if (this.starLayers[1]) {
+      this.starLayers[1].rotation.y -= 0.00009 * this.motionScale;
+      this.starLayers[1].rotation.x = Math.sin(t * 0.08) * 0.04;
+      this.starLayers[1].material.opacity = 0.61 + Math.sin(t * 0.47 + 0.6) * 0.045 * twinkle;
+    }
+    if (this.starLayers[2]) {
+      this.starLayers[2].rotation.y += 0.00005 * this.motionScale;
+      this.starLayers[2].material.opacity = 0.44 + Math.sin(t * 0.33 + 1.8) * 0.03 * twinkle;
+    }
+
     this.pathMaterial.opacity = 0.5 + Math.sin(t * 0.7) * 0.06;
     this.pathGlowMaterial.opacity = 0.28 + Math.sin(t * 0.6 + 0.25) * 0.05;
-    this.earth.rotation.y += 0.00014;
-    if (this.earth.userData.cloudBand) {
-      this.earth.userData.cloudBand.rotation.y += 0.00024;
-      this.earth.userData.cloudBand.material.opacity = 0.055 + Math.sin(t * 0.8) * 0.02;
+
+    this.earth.rotation.y = this.getEarthRotationRad();
+    if (this.surfaceLockActive) {
+      const anchoredPosition = this.getRocketAnchoredPosition(
+        this.currentAltitudeM,
+        this.currentArcAngleRad || 0,
+        true
+      );
+      const anchoredNormal = anchoredPosition.clone().normalize();
+      this.rocket.position.copy(anchoredPosition);
+      this.currentTarget.copy(anchoredPosition);
+      this.rocket.quaternion.setFromUnitVectors(ROCKET_NOSE_AXIS, anchoredNormal);
+      this.previousRocketPosition.copy(this.rocket.position);
+      this.previousDirection.copy(anchoredNormal);
+      this.smoothedPathDirection.copy(anchoredNormal);
     }
+    if (this.earth.userData.cloudBand) {
+      this.earth.userData.cloudBand.rotation.y += 0.00022 * this.motionScale;
+      this.earth.userData.cloudBand.material.opacity = 0.14 + Math.sin(t * 0.4) * 0.03 * this.motionScale;
+    }
+
+    if (this.earth.userData.atmosphere) {
+      this.earth.userData.atmosphere.material.opacity = 0.15 + Math.sin(t * 0.27 + 0.2) * 0.015 * this.motionScale;
+    }
+
+    if (this.nebulaBands) {
+      this.nebulaBands.rotation.y += 0.00003 * this.motionScale;
+      this.nebulaBands.rotation.z = Math.sin(t * 0.05) * 0.06;
+    }
+
+    if (this.sunRays) {
+      this.sunRays.material.rotation += 0.0008 * this.motionScale;
+      this.sunRays.material.opacity = 0.52 + Math.sin(t * 0.7) * 0.08;
+    }
+
+    this.updateShootingStars(deltaSec);
+
     this.renderer.render(this.scene, this.camera);
   }
 }
+

@@ -28,6 +28,8 @@ const dom = {
   fastForwardButton: document.getElementById('fastForwardButton'),
   speedBadge: document.getElementById('speedBadge'),
   cameraSelect: document.getElementById('cameraSelect'),
+  qualitySelect: document.getElementById('qualitySelect'),
+  reducedMotionToggle: document.getElementById('reducedMotionToggle'),
   countdownLabel: document.getElementById('countdownLabel'),
   missionName: document.getElementById('missionName'),
   missionMeta: document.getElementById('missionMeta'),
@@ -123,6 +125,7 @@ function setPreset(presetId) {
 
   charts.reset();
   telemetry.reset();
+  scene.setLaunchSite(preset.location);
   scene.resetPath();
   renderMissionMetadata(preset);
 
@@ -296,7 +299,24 @@ function reset() {
 
 async function init() {
   state.presets = await loadLaunchPresets();
+
+  if (!state.presets || state.presets.length === 0) {
+    dom.countdownLabel.textContent = 'NO PRESETS';
+    dom.missionName.textContent = 'No Missions Available';
+    dom.missionMeta.textContent = 'No launch presets were loaded. Check src/data/launchPresets.json and browser fetch access.';
+    dom.launchButton.disabled = true;
+    dom.resetButton.disabled = true;
+    dom.fastForwardButton.disabled = true;
+    return;
+  }
+
   populatePresetSelect();
+
+  const prefersReducedMotion = window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  dom.reducedMotionToggle.checked = Boolean(prefersReducedMotion);
+  scene.setReducedMotion(Boolean(prefersReducedMotion));
+  scene.setQuality(dom.qualitySelect?.value || 'medium');
 
   setPreset(state.presets[0].id);
   reset();
@@ -316,6 +336,14 @@ async function init() {
 
   dom.cameraSelect.addEventListener('change', (event) => {
     scene.setCameraMode(event.target.value);
+  });
+
+  dom.qualitySelect.addEventListener('change', (event) => {
+    scene.setQuality(event.target.value);
+  });
+
+  dom.reducedMotionToggle.addEventListener('change', (event) => {
+    scene.setReducedMotion(event.target.checked);
   });
 
   dom.simCanvas.addEventListener('pointerdown', () => {

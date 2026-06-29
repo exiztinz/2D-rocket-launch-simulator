@@ -33,6 +33,18 @@
             <option value="free">Free Orbit (Drag)</option>
           </select>
         </label>
+        <label>
+          Visual Quality
+          <select id="qualitySelect">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+        <label class="toggle-label" for="reducedMotionToggle">
+          Reduced Motion
+          <input id="reducedMotionToggle" type="checkbox" />
+        </label>
         <button id="fastForwardButton" class="btn-ghost">Fast Forward 4x</button>
         <button id="launchButton">Launch</button>
         <button id="resetButton" class="btn-ghost">Reset</button>
@@ -94,6 +106,25 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script type="module" src="./src/app.js"></script>
+  <script>
+    // If the module app fails to initialize (commonly when opened via file://),
+    // surface a clear next step instead of leaving the preset select empty.
+    window.setTimeout(() => {
+      const presetSelect = document.getElementById('presetSelect');
+      const missionMeta = document.getElementById('missionMeta');
+      const countdownLabel = document.getElementById('countdownLabel');
+
+      if (!presetSelect || !missionMeta || !countdownLabel) return;
+
+      const hasOptions = presetSelect.options && presetSelect.options.length > 0;
+      const stillLoading = missionMeta.textContent && missionMeta.textContent.includes('Loading mission profile');
+
+      if (!hasOptions && stillLoading) {
+        countdownLabel.textContent = 'SERVER NEEDED';
+        missionMeta.textContent = 'Launch presets did not load. Open this project through a local web server (for example: npm run start).';
+      }
+    }, 1600);
+  </script>
 </body>
 
 </html>
